@@ -3,7 +3,8 @@ message: If you use Lannotex to build a dataset for published work, please cite 
 title: "Lannotex: offline-first image annotation"
 type: software
 authors:
-  - name: Lannotex contributors
+  - given-names: Lourdhu
+    family-names: Raju
 repository-code: https://github.com/Lourdhu02/Lannotex
 url: https://lourdhu02.github.io/Lannotex/
 license: MIT

@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "LICENSES/THIRD_PARTY_NOTICES.md"]
-authors = [{ name = "Lannotex contributors" }]
+authors = [{ name = "Lourdhu Raju" }]
+maintainers = [{ name = "Lourdhu Raju" }]
 keywords = ["annotation", "labeling", "computer-vision", "yolo", "coco", "labelme", "qt", "pyside6", "machine-learning"]
 classifiers = [
     "Development Status :: 3 - Alpha",

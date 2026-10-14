@@ -156,7 +156,7 @@ If Lannotex saves you time, a ⭐ helps other people find it.
 
 ## License
 
-[MIT](https://github.com/Lourdhu02/Lannotex/blob/main/LICENSE). Third-party licenses are
+[MIT](https://github.com/Lourdhu02/Lannotex/blob/main/LICENSE) © 2026 [Lourdhu Raju](https://github.com/Lourdhu02). Third-party licenses are
 listed in [THIRD_PARTY_NOTICES.md](https://github.com/Lourdhu02/Lannotex/blob/main/LICENSES/THIRD_PARTY_NOTICES.md).
 Demo images are public-domain and CC0 samples from
 [scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html).
