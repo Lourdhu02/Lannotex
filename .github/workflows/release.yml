@@ -40,18 +40,20 @@ jobs:
       - name: Build on Linux
         if: runner.os == 'Linux'
         run: ./scripts/build_linux.sh
-      - name: Archive binary
-        shell: bash
-        run: |
-          cd dist
-          tar -czf ../Lannotex-${{ runner.os }}.tar.gz Lannotex
-          cd ..
-          ls -la Lannotex-*.tar.gz
+      - name: Archive binary (zip on Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist\Lannotex -DestinationPath Lannotex-Windows.zip
+      - name: Archive binary (tar.gz on macOS / Linux)
+        if: runner.os != 'Windows'
+        run: tar -czf Lannotex-${{ runner.os }}.tar.gz -C dist Lannotex
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: Lannotex-${{ runner.os }}
-          path: Lannotex-*.tar.gz
+          path: |
+            Lannotex-*.zip
+            Lannotex-*.tar.gz
           if-no-files-found: error
 
   release:
@@ -60,6 +62,16 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v h="## [$version]" '
+            index($0, h) == 1 {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || { echo "No CHANGELOG.md section for $version"; exit 1; }
       - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
@@ -68,7 +80,11 @@ jobs:
       - name: Attach artifacts to release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/Lannotex-*.tar.gz
+          name: Lannotex ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: |
+            artifacts/Lannotex-*.zip
+            artifacts/Lannotex-*.tar.gz
 
   publish-pypi:
     name: publish to PyPI

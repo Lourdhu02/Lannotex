@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-14
+
+First public release on PyPI: `pip install lannotex` or `uv tool install lannotex`.
+Standalone builds for Windows, macOS, and Linux are attached to the GitHub release.
+
 ### Added
 
 - Documentation site (MkDocs Material) with install, quick start, user guide, CLI
