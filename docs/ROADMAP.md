@@ -1,15 +1,16 @@
 # Roadmap
 
-This document captures where Lannotex is headed. v0.0.2 is the rebrand +
-packaging + cross-platform release; the items below are the priority work to
-make Lannotex a mature Labelme alternative.
+This document captures work beyond the current desktop refresh. Home, pipeline
+presets, monochrome themes, background imports, editable polygons, analysis,
+backup/restore/relink, and optional team synchronization are implemented. Their
+tested scope is documented in VERIFICATION.md.
 
 ## v0.1 — dataset-scale reliability
 
-- **Background importer with a thumbnail cache** — replace the synchronous
-  dimension read during folder import so 10 GB folders import in the background.
-- **Polygon vertex editing reload rendering** — render saved polygons' vertices
-  after reload (in-session editing already works).
+- **Dataset validation and thumbnail strip** — measure real 10 GB datasets;
+  add lazily generated thumbnails to the paged list.
+- **Tiled, full-resolution zoom** — avoid full-size transient decode memory and
+  preview-resolution limits on extremely large images.
 - **Project archive / restore / relink UI** — one-click archive of images +
   annotations, and bulk re-linking of moved folders.
 - **Undo/redo across navigation** — persist the undo stack with drafts so
@@ -18,15 +19,16 @@ make Lannotex a mature Labelme alternative.
 ## v0.2 — export & automation
 
 - **Export wizard** with format previews and per-format options.
-- **Analysis page** in-app (today it is available via `lannotex analyze`).
-- **Configurable themes and layout persistence** (today: dark/light + remembered
-  window geometry).
+- **Team assignments and independent review** — optional work allocation,
+  review roles, and a visual saved-version comparison screen.
+- **Network soak tests** — real multi-computer LAN, host sleep, reconnect, TLS,
+  and high-volume conflicts.
 - **Python API documentation** for `domain`, `storage`, and `exporters` so
   Lannotex can be embedded in training pipelines.
 
 ## v0.3 — distribution & ecosystem
 
-- **Microsoft Store packaging** (MSIX, no network capability by default).
+- **Microsoft Store packaging** (MSIX, explicit capability review for optional team hosting).
 - **Auto-update channel** for standalone binaries.
 - **npm companion CLI** *(optional)* — a thin JS/TS shim that downloads the
   prebuilt binary for each platform, for teams that standardize on Node tooling.

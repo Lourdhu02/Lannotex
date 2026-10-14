@@ -12,20 +12,22 @@ from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QCombo
     QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
     QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel, QLineEdit, QListView, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
-    QSplitter, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
+    QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
 from .exporters import analyze, export_project, import_annotations
 from .models import ImageListModel
-from .storage import Project, atomic_text
+from .storage import ConflictError, Project, atomic_text
 from .theme import apply_theme
 from .workers import ImageLoader, Job, import_images
+from .home import Home, CreateProjectDialog, PIPELINES
+from .team import TeamClient, TeamServer, add_member, sync_replica, resolve_conflict
 
 COLORS = ['#37b8a5','#70a8f5','#d5a85a','#bf8bef','#ed8ca4','#74c9db','#9fbd68']
 DEFAULT_KEYS = {'save':'Ctrl+S','save_next':'Ctrl+Return','previous':'Alt+Left','next':'Alt+Right',
                 'undo':'Ctrl+Z','redo':'Ctrl+Shift+Z','delete':'Del','cancel':'Esc','finish':'Return',
                 'fit':'F','select':'V','box':'B','polygon':'P','duplicate':'Ctrl+D','redraw':'R',
-                'vertex':'Shift+Del','focus':'Tab','open':'Ctrl+O','import':'Ctrl+I'}
+                'vertex':'Shift+Del','focus':'Ctrl+Shift+F','open':'Ctrl+O','import':'Ctrl+I'}
 
 
 def button(text, callback, primary=False):
@@ -46,8 +48,9 @@ class Main(QMainWindow):
         self.resize(1440,940); self.setMinimumSize(900,620)
         self.settings = QSettings('Lannotex','Desktop')
         self.bindings = dict(DEFAULT_KEYS)
-        self.bindings.update(self.settings.value('keys',{},type=dict))
-        self.dark = self.settings.value('dark',True,type=bool)
+        stored = self.settings.value('keys', {})
+        if isinstance(stored, dict): self.bindings.update(stored)
+        self.dark = self.settings.value('dark',False,type=bool)
         apply_theme(QApplication.instance(),self.dark)
         self.project = None; self.current = None; self.document = Document()
         self.dirty = False; self.loading = False; self.guard = False; self.token = 0
@@ -58,6 +61,15 @@ class Main(QMainWindow):
         self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.save)
         self.filter_timer = QTimer(self); self.filter_timer.setSingleShot(True); self.filter_timer.timeout.connect(self.filter_images)
         self.actions = {}; self._build_ui(); self._build_menus()
+        self.workspace=self.takeCentralWidget(); self.workspace.setObjectName('workspace')
+        self.home=Home(); self.pages=QStackedWidget(); self.pages.addWidget(self.home); self.pages.addWidget(self.workspace)
+        self.setCentralWidget(self.pages)
+        self.home.create_requested.connect(self.new_project); self.home.open_requested.connect(self.open_project)
+        self.home.continue_requested.connect(self.load_project); self.home.theme_requested.connect(self.toggle_theme)
+        self.home.preferences_requested.connect(self.preferences); self.home.join_requested.connect(self.join_team)
+        self.home.refresh(self.settings.value('recent_projects',[],type=list))
+        self.host=None; self.team_client=None; self.team_token=''; self.sync_job=None; self.pending_team=None; self.current_revision=None
+        self.sync_timer=QTimer(self); self.sync_timer.setInterval(4000); self.sync_timer.timeout.connect(self.sync_team)
         QApplication.instance().installEventFilter(self)
         geometry = self.settings.value('geometry')
         if geometry: self.restoreGeometry(geometry)
@@ -68,10 +80,14 @@ class Main(QMainWindow):
     def _build_ui(self):
         root = QWidget(); outer = QVBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
         header=QFrame(); header.setObjectName('header'); bar=QHBoxLayout(header); bar.setContentsMargins(20,14,20,14)
-        brand=QVBoxLayout(); brand.setSpacing(1); brand.addWidget(label('Lannotex','brand')); brand.addWidget(label('DESKTOP  /  LOCAL WORKSPACE'))
+        bar.addWidget(button('‹ Home',self.go_home))
+        brand=QVBoxLayout(); brand.setSpacing(1); brand.addWidget(label('Lannotex','brand')); self.pipeline_title=label('ANNOTATION WORKSPACE'); brand.addWidget(self.pipeline_title)
         bar.addLayout(brand); bar.addSpacing(28)
         self.project_title=label('No project open'); bar.addWidget(self.project_title,1)
         bar.addWidget(button('New project',self.new_project)); bar.addWidget(button('Open',self.open_project))
+        self.team_button=button('Team',self.team_dialog); bar.addWidget(self.team_button)
+        self.sync_button=button('Sync',self.sync_team); bar.addWidget(self.sync_button); self.sync_button.hide()
+        bar.addWidget(button('◐',self.toggle_theme))
         self.analysis_button=button('Analysis',self.show_analysis); bar.addWidget(self.analysis_button)
         self.export_button=button('Export',self.export_dialog,True); bar.addWidget(self.export_button)
         outer.addWidget(header)
@@ -116,17 +132,19 @@ class Main(QMainWindow):
         self.splitter.addWidget(center)
         self.right=QScrollArea(); self.right.setWidgetResizable(True); self.right.setMinimumWidth(245)
         inspector=QWidget(); form=QVBoxLayout(inspector); form.setContentsMargins(14,10,14,14); form.setSpacing(9)
-        form.addWidget(label('LABELS & ANNOTATIONS','section'))
+        self.inspector_heading=label('LABELS & ANNOTATIONS','section'); form.addWidget(self.inspector_heading)
         labelbar=QHBoxLayout(); self.label_combo=QComboBox(); self.label_combo.setMinimumWidth(100)
         self.label_combo.currentTextChanged.connect(self.label_changed); labelbar.addWidget(self.label_combo,1)
         self.add_label_button=button('+',self.add_label); self.add_label_button.setToolTip('Add a named label'); labelbar.addWidget(self.add_label_button)
         form.addLayout(labelbar)
-        tax=QHBoxLayout(); tax.addWidget(button('Rename',self.rename_label)); tax.addWidget(button('Remove',self.remove_label)); form.addLayout(tax)
-        form.addWidget(label('IMAGE CLASSIFICATION','section'))
+        tax=QHBoxLayout(); self.rename_button=button('Rename',self.rename_label); self.remove_label_button=button('Remove',self.remove_label)
+        tax.addWidget(self.rename_button); tax.addWidget(self.remove_label_button); form.addLayout(tax)
+        self.classification_heading=label('IMAGE CLASSIFICATION','section'); form.addWidget(self.classification_heading)
         self.classes=QListWidget(); self.classes.setMinimumHeight(70); self.classes.setMaximumHeight(150)
         self.classes.itemChanged.connect(self.class_changed); form.addWidget(self.classes)
+        self.classes.currentItemChanged.connect(self.class_focused)
         self.negative=QCheckBox('No target objects in this image'); self.negative.toggled.connect(self.negative_changed); form.addWidget(self.negative)
-        form.addWidget(label('OBJECTS','section'))
+        self.objects_heading=label('OBJECTS','section'); form.addWidget(self.objects_heading)
         self.annotation_list=QListWidget(); self.annotation_list.setMinimumHeight(110); self.annotation_list.setMaximumHeight(220)
         self.annotation_list.currentItemChanged.connect(self.annotation_selected); form.addWidget(self.annotation_list)
         self.selection_info=label('Select an object to edit its geometry.'); self.selection_info.setWordWrap(True); form.addWidget(self.selection_info)
@@ -141,10 +159,10 @@ class Main(QMainWindow):
         self.delete_button=button('Delete selected',self.delete_selected); self.delete_button.setObjectName('danger'); form.addWidget(self.delete_button)
         form.addWidget(button('Clear image annotations',self.clear_annotations))
         from PySide6.QtWidgets import QSlider
-        form.addWidget(label('OVERLAY OPACITY','section')); self.opacity=QSlider(Qt.Horizontal); self.opacity.setRange(0,70)
+        self.opacity_heading=label('OVERLAY OPACITY','section'); form.addWidget(self.opacity_heading); self.opacity=QSlider(Qt.Horizontal); self.opacity.setRange(0,70)
         self.opacity.setValue(self.settings.value('opacity',15,type=int)); self.canvas.opacity=self.opacity.value()/100
         self.opacity.valueChanged.connect(self.opacity_changed); form.addWidget(self.opacity)
-        hint=label('Polygon: drag a vertex to edit. Double-click an edge to insert. Shift+Delete removes the selected vertex.'); hint.setWordWrap(True); form.addWidget(hint)
+        self.polygon_hint=label('Polygon: drag a vertex to edit. Double-click an edge to insert. Shift+Delete removes the selected vertex.'); self.polygon_hint.setWordWrap(True); form.addWidget(self.polygon_hint)
         form.addStretch(); form.addWidget(button('Keyboard & preferences',self.preferences))
         self.right.setWidget(inspector); self.splitter.addWidget(self.right); self.splitter.setSizes([260,850,280])
         wrap=QWidget(); layout=QVBoxLayout(wrap); layout.setContentsMargins(12,12,12,12); layout.addWidget(self.splitter)
@@ -185,6 +203,7 @@ class Main(QMainWindow):
 
     def eventFilter(self, obj, event):
         if event.type()!=QEvent.KeyPress or QApplication.activeWindow()!=self: return super().eventFilter(obj,event)
+        if hasattr(self,'pages') and self.pages.currentWidget()==self.home: return super().eventFilter(obj,event)
         seq=QKeySequence(event.key() | event.modifiers().value).toString()
         typing=isinstance(QApplication.focusWidget(),(QLineEdit,QTextEdit,QAbstractSpinBox,QComboBox,QKeySequenceEdit))
         for key,binding in self.bindings.items():
@@ -209,38 +228,79 @@ class Main(QMainWindow):
     def refresh_controls(self):
         opened=self.project is not None; ready=opened and self.current is not None and not self.loading and self.canvas.image is not None
         for b in (self.import_button,self.files_button,self.analysis_button,self.export_button,self.add_label_button): b.setEnabled(opened and self.job is None)
+        remote=bool(self.project.setting('team_remote')) if opened else False
+        self.left_hint.setText('Local cache · shared with\nyour chosen team host.' if remote else 'Images stay on your disk.\nNothing is uploaded automatically.')
+        self.team_button.setEnabled(opened); self.sync_button.setVisible(remote)
+        for b in (self.import_button,self.files_button,self.add_label_button,self.rename_button,self.remove_label_button):
+            b.setEnabled(opened and self.job is None and not remote)
+        self.label_combo.setEnabled(not remote or ready)
         for b in (self.save_button,self.next_button,self.negative,self.classes,self.annotation_list): b.setEnabled(ready)
         tasks=self.project.setting('tasks',['box','polygon','classification']) if opened else []
-        for mode,b in self.tool_buttons.items(): b.setEnabled(ready and (mode=='select' or mode in tasks))
+        objects=bool(set(tasks)&{'box','polygon'})
+        for mode,b in self.tool_buttons.items():
+            b.setEnabled(ready and (mode=='select' or mode in tasks)); b.setVisible(objects if mode=='select' else mode in tasks)
+        for widget in (self.classes,self.classification_heading): widget.setVisible('classification' in tasks)
+        for widget in (self.objects_heading,self.annotation_list,self.selection_info,self.duplicate_button,self.redraw_button,self.delete_button,self.opacity,self.opacity_heading): widget.setVisible(objects)
+        self.polygon_hint.setVisible('polygon' in tasks)
+        self.label_combo.setVisible(objects)
+        self.inspector_heading.setText('CLASSES' if tasks==['classification'] else 'LABELS & ANNOTATIONS')
+        self.add_label_button.setText('+ Class' if tasks==['classification'] else '+')
+        self.negative.setText('None of these classes apply' if tasks==['classification'] else 'No target objects in this image')
+        if tasks==['classification']: self.canvas_hint.setText('Select all classes that describe this image · Save & next to continue')
+        if tasks==['classification']: self.geometry_widget.hide()
         self.classes.setEnabled(ready and 'classification' in tasks)
         self.undo_button.setEnabled(ready and bool(self.document.undo_stack)); self.redo_button.setEnabled(ready and bool(self.document.redo_stack))
         selected=ready and self.canvas.selection is not None
         for b in (self.duplicate_button,self.redraw_button,self.delete_button): b.setEnabled(selected)
 
-    def new_project(self):
-        folder=QFileDialog.getExistingDirectory(self,'Choose a new project folder')
-        if not folder: return
-        if (Path(folder)/'project.sqlite3').exists(): self.load_project(folder); return
-        if self.load_project(folder,create=True): self.task_settings()
+    def new_project(self,pipeline='classification'):
+        if not isinstance(pipeline,str): pipeline='classification'
+        if self.job or not self.save(): return
+        dialog=CreateProjectDialog(pipeline,self)
+        if dialog.exec()!=QDialog.Accepted: return
+        try:
+            project=Project(dialog.folder)
+            project.set_setting('tasks',PIPELINES[dialog.pipeline][2]); project.set_setting('pipeline',dialog.pipeline)
+            project.set_setting('mode',dialog.mode.currentData()); project.set_setting('name',dialog.name.text().strip())
+            for i,name in enumerate(s.strip() for s in dialog.classes.toPlainText().splitlines() if s.strip()): project.add_label(name,COLORS[i%len(COLORS)])
+            project.close()
+        except Exception as error: self.fail('Could not create project',error); return
+        if self.load_project(dialog.folder) and dialog.mode.currentData()=='team': self.team_dialog()
 
     def open_project(self):
         folder=QFileDialog.getExistingDirectory(self,'Open project folder',self.settings.value('last_project',''))
         if folder: self.load_project(folder)
 
-    def load_project(self, folder, create=False):
+    def load_project(self, folder, create=False, client=None):
+        if self.sync_job: self.notice('Wait for the current team sync before switching.'); return False
+        if self.host and Path(folder).resolve()!=self.project.root:
+            self.notice('Stop hosting from Team before switching projects.'); return False
         if self.job: self.notice('Finish or cancel the background job before switching projects.'); return False
         if not self.save(): return False
         try: next_project=Project(folder,create=create)
         except Exception as error: self.fail('Cannot open project',error); return False
         self.timer.stop(); self.token+=1
+        self.sync_timer.stop(); self.team_client=client; self.team_token=''
         if self.project: self.project.close()
         self.project=next_project; self.current=None; self.document=Document(); self.dirty=False; self.loading=False
         self.canvas.set_image(None); self.canvas.set_annotations([])
         self.project_title.setText(self.project.root.name); self.project_title.setToolTip(str(self.project.root))
         self.settings.setValue('last_project',str(self.project.root))
+        recent=self.settings.value('recent_projects',[],type=list)
+        recent=[str(self.project.root)]+[p for p in recent if p!=str(self.project.root)]
+        self.settings.setValue('recent_projects',recent[:12]); self.home.refresh(recent[:12])
+        self.pipeline_title.setText(' / '.join({'box':'DETECTION','polygon':'SEGMENTATION','classification':'CLASSIFICATION'}[t] for t in self.project.setting('tasks',['box','polygon','classification'])))
+        self.pages.setCurrentWidget(self.workspace)
+        self.search.blockSignals(True); self.search.clear(); self.search.blockSignals(False)
+        self.filter.blockSignals(True); self.filter.setCurrentIndex(0); self.filter.blockSignals(False)
         self.refresh_labels(); self.refresh_images(); self.set_save_state('Saved'); self.refresh_controls()
         self.notice('Project open. Add labels, import images, and start annotating.')
+        if self.team_client: self.sync_timer.start()
         return True
+
+    def go_home(self):
+        if not self.save(): return
+        self.canvas.cancel(); self.home.refresh(self.settings.value('recent_projects',[],type=list)); self.pages.setCurrentWidget(self.home)
 
     def refresh_images(self):
         self.model.refresh(self.project,self.search.text(),self.filter.currentData())
@@ -261,18 +321,26 @@ class Main(QMainWindow):
     def select_index(self,index,previous=QModelIndex()):
         if not index.isValid() or not self.project: return
         record=self.model.record(index.row())
-        if self.current and record['id']==self.current['id']: return
+        if self.current and record['id']==self.current['id'] and (self.canvas.image is not None or self.loading): return
         if not self.save():
             self.images.selectionModel().blockSignals(True); self.images.setCurrentIndex(previous); self.images.selectionModel().blockSignals(False); return
         self.canvas.cancel(); self.timer.stop(); self.token+=1; self.current=dict(record)
-        annotations,negative,recovered=self.project.load_state(record['id'])
+        annotations,negative,recovered,revision=self.project.load_document(record['id'])
         self.document=Document(annotations,negative); self.dirty=recovered; self.loading=True
+        self.current_revision=revision
         self.canvas.empty_title='Loading image…'; self.canvas.empty_detail=Path(record['path']).name
         self.canvas.set_image(None); self.canvas.set_annotations(annotations)
         self.image_title.setText(Path(record['path']).name); self.image_title.setToolTip(str(self.project.resolve(record['path'])))
         self.position.setText(f'{index.row()+1:,} / {self.model.total:,}')
         self.set_save_state('Recovered draft' if recovered else 'Saved'); self.sync_inspector(); self.refresh_controls()
-        self.loader.request(self.token,self.project.resolve(record['path']))
+        path=self.project.resolve(record['path'])
+        if self.team_client and not path.is_file():
+            if self.job: self.notice('Wait for the current operation, then select the image again.'); self.loading=False; return
+            client=self.team_client; token=self.token; ident=record['id']
+            def download(cancel,progress):
+                client.download(ident,path,cancel); return (token,str(path))
+            self.start_job('download',download)
+        else: self.loader.request(self.token,path)
 
     @Slot(object,object)
     def image_ready(self,token,image):
@@ -298,17 +366,26 @@ class Main(QMainWindow):
         if self.save(): self.navigate(1)
 
     def save(self):
+        if self.canvas.points or (self.canvas.drag and self.canvas.drag['kind']!='pan'):
+            self.notice('Finish or cancel the current drawing before saving or leaving this image.'); return False
         if not self.project or not self.current or not self.dirty: return True
         self.timer.stop(); self.set_save_state('Saving…')
         try:
-            self.project.save_annotations(self.current['id'],self.document.annotations,self.document.negative)
+            self.project.save_annotations(self.current['id'],self.document.annotations,self.document.negative,
+                                          expected_revision=self.current_revision)
+            self.current_revision=self.project.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(self.current['id'],)).fetchone()[0]
         except Exception as error:
+            if isinstance(error,ConflictError) and self.project.setting('team_remote'):
+                with self.project.conn: self.project.conn.execute('UPDATE team_links SET conflict=1 WHERE image_id=?',(self.current['id'],))
             self.set_save_state('Save failed · retry'); self.notice(f'Save failed: {error}. Your edits are still open.'); return False
-        self.dirty=False; self.set_save_state('Saved'); self.model.invalidate(); return True
+        self.dirty=False; self.set_save_state('Saved locally · queued' if self.project.setting('team_remote') else 'Saved'); self.model.invalidate(); return True
 
     def commit(self,annotations,negative=False):
         if not self.current or self.loading or self.canvas.image is None: return
         errors=validate_all(annotations,set(self.canvas.colors),negative)
+        allowed=set(self.project.setting('tasks',['box','polygon','classification']))
+        old_ids={a.id for a in self.document.annotations}
+        if any(a.kind not in allowed and a.id not in old_ids for a in annotations): errors.append('This annotation type is not enabled in the project pipeline')
         if errors: self.notice(errors[0]); return
         if self.document.change(annotations,negative): self.document_changed()
 
@@ -316,7 +393,7 @@ class Main(QMainWindow):
         self.dirty=True
         self.canvas.set_annotations(self.document.annotations)
         self.sync_inspector(); self.refresh_controls(); self.set_save_state('Unsaved')
-        try: self.project.save_draft(self.current['id'],self.document.annotations,self.document.negative)
+        try: self.project.save_draft(self.current['id'],self.document.annotations,self.document.negative,self.current_revision)
         except Exception as error:
             self.set_save_state('Draft write failed'); self.notice(f'Keep this window open: {error}')
         if self.settings.value('autosave',True,type=bool): self.timer.start(700)
@@ -349,10 +426,11 @@ class Main(QMainWindow):
             item=QListWidgetItem(name); item.setFlags(item.flags()|Qt.ItemIsUserCheckable); item.setCheckState(Qt.Unchecked)
             item.setForeground(QColor(color)); self.classes.addItem(item)
         if active in self.canvas.colors: self.label_combo.setCurrentText(active)
+        self.classes.setFixedHeight(min(150,max(70,self.classes.count()*34)))
         self.canvas.label=self.label_combo.currentText(); self.guard=False; self.sync_inspector()
 
     def add_label(self):
-        if not self.project or self.job: return
+        if not self.project or self.job or self.project.setting('team_remote'): return
         name,ok=QInputDialog.getText(self,'Add label','Label name')
         if ok and name.strip():
             try: self.project.add_label(name,COLORS[len(self.canvas.colors)%len(COLORS)])
@@ -360,18 +438,20 @@ class Main(QMainWindow):
             self.refresh_labels(); self.label_combo.setCurrentText(name.strip())
 
     def rename_label(self):
-        if not self.project or self.job or not self.label_combo.currentText(): return
+        if not self.project or self.job or self.project.setting('team_remote') or not self.label_combo.currentText(): return
+        if self.host: self.fail('Stop hosting first','Taxonomy changes require stopping team hosting so no review changes during the rename.'); return
         old=self.label_combo.currentText(); new,ok=QInputDialog.getText(self,'Rename label','New name · updates every annotation',text=old)
         if not ok or new.strip()==old: return
         if not self.save(): return
         try: self.project.rename_label(old,new)
         except Exception as e: self.fail('Cannot rename label',e); return
         if self.current:
-            anns,negative,_=self.project.load_state(self.current['id']); self.document=Document(anns,negative); self.canvas.set_annotations(anns)
+            anns,negative,_,self.current_revision=self.project.load_document(self.current['id']); self.document=Document(anns,negative); self.canvas.set_annotations(anns)
         self.refresh_labels(); self.refresh_controls()
 
     def remove_label(self):
-        if not self.project or self.job or not self.save(): return
+        if not self.project or self.job or self.project.setting('team_remote') or not self.save(): return
+        if self.host: self.fail('Stop hosting first','Stop team hosting before removing a label.'); return
         try: self.project.remove_label(self.label_combo.currentText())
         except Exception as e: self.fail('Cannot remove label',e); return
         self.refresh_labels()
@@ -397,6 +477,12 @@ class Main(QMainWindow):
             item.setData(Qt.UserRole,a.id); self.annotation_list.addItem(item)
             if a.id==selected: self.annotation_list.setCurrentItem(item)
         self.guard=False; self.selection_changed(selected)
+        self.annotation_list.setFixedHeight(min(160,max(70,self.annotation_list.count()*48)))
+
+    def class_focused(self,item,previous=None):
+        if self.guard or not item or not self.project: return
+        if self.project.setting('tasks')==['classification']:
+            self.guard=True; self.label_combo.setCurrentText(item.text()); self.guard=False
 
     def class_changed(self,item):
         if self.guard: return
@@ -472,11 +558,12 @@ class Main(QMainWindow):
         if paths: self.start_import(paths)
 
     def start_import(self,paths):
+        if self.project.setting('team_remote'): self.notice('Import images on the project host.'); return
         root=self.project.root
         self.start_job('import',lambda cancel,progress:import_images(root,paths,cancel,progress))
 
     def import_annotation_dialog(self):
-        if not self.project or self.job: return
+        if not self.project or self.job or self.project.setting('team_remote'): return
         path,_=QFileDialog.getOpenFileName(self,'Import Labelme JSON or native annotations.jsonl','','Annotations (*.json *.jsonl)')
         if path and self.save():
             root=self.project.root; self.start_job('annotations',lambda cancel,progress:import_annotations(root,path,cancel,progress))
@@ -505,13 +592,26 @@ class Main(QMainWindow):
             self.show_report('Export summary',f"Included: {result['included']}\nUnlabeled included: {result['unlabeled']}\nSkipped images: {result['skipped']}\nAnnotations unsupported by this format: {result['unsupported_annotations']}\nCancelled: {result.get('cancelled',False)}\n\n{result['path']}\n\n"+'\n'.join(result['errors']))
         elif self.job_kind=='analysis': self.analysis_result(result)
         elif self.job_kind=='backup': self.notice(f'Backup saved: {result}')
+        elif self.job_kind=='join': self.pending_team=result
+        elif self.job_kind=='download':
+            token,path=result
+            if token==self.token: self.loader.request(token,path)
+            elif self.current and self.canvas.image is None: self.pending_image_retry=True
+        elif self.job_kind=='resolve':
+            self.reload_current(); self.notice('Conflict resolved; project history retains the save.')
 
     @Slot(str)
-    def job_error(self,error): self.fail('Background operation failed',error)
+    def job_error(self,error):
+        if self.job_kind=='download': self.image_failed(self.token,error)
+        else: self.fail('Background operation failed',error)
 
     @Slot()
     def job_finished(self):
         self.job=None; self.job_kind=''; self.progress.hide(); self.cancel_button.hide(); self.refresh_controls()
+        if self.pending_team:
+            root,client=self.pending_team; self.pending_team=None; self.load_project(root,client=client)
+        elif getattr(self,'pending_image_retry',False):
+            self.pending_image_retry=False; self.select_index(self.images.currentIndex())
 
     def cancel_job(self):
         if self.job: self.job.cancel.set(); self.notice('Cancelling after the current file…')
@@ -583,7 +683,9 @@ class Main(QMainWindow):
         except Exception as e: self.fail('Relink failed',e)
 
     def task_settings(self):
-        if not self.project: return
+        if not self.project or not self.save(): return
+        if self.project.setting('team_remote') or self.host:
+            self.notice('Pipeline settings are managed on the host while team hosting is stopped.'); return
         dialog=QDialog(self); dialog.setWindowTitle('Project tasks'); layout=QVBoxLayout(dialog)
         layout.addWidget(label('Enable any combination of tasks. Existing annotations are retained.'))
         tasks=self.project.setting('tasks',['box','polygon','classification']); boxes={}
@@ -591,10 +693,183 @@ class Main(QMainWindow):
             box=QCheckBox(title); box.setChecked(key in tasks); boxes[key]=box; layout.addWidget(box)
         buttons=QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel); buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject); layout.addWidget(buttons)
         if dialog.exec()==QDialog.Accepted:
-            self.project.set_setting('tasks',[key for key,box in boxes.items() if box.isChecked()]); self.set_tool('select'); self.refresh_controls()
+            tasks=[key for key,box in boxes.items() if box.isChecked()]
+            if not tasks: self.fail('Choose a pipeline','Enable at least one task.'); return
+            used={row[0] for row in self.project.conn.execute("SELECT DISTINCT json_extract(data,'$.kind') FROM annotations")}
+            if used-set(tasks): self.fail('Existing annotations use this task','Export or remove those annotations before disabling their task.'); return
+            self.project.set_setting('tasks',tasks); self.set_tool('select'); self.refresh_controls()
 
     def toggle_focus(self):
         self.focus_mode=not self.focus_mode; self.left.setVisible(not self.focus_mode); self.right.setVisible(not self.focus_mode)
+
+    def join_team(self):
+        if self.job or self.sync_job or self.host or not self.save(): return
+        dialog=QDialog(self); dialog.setWindowTitle('Join a team project'); dialog.resize(580,420)
+        layout=QVBoxLayout(dialog); layout.addWidget(label('Connect to your project host','cardTitle'))
+        url=QLineEdit(); url.setPlaceholderText('http://192.168.1.20:8765 or https://your-host')
+        token=QLineEdit(); token.setPlaceholderText('Your reviewer access token'); token.setEchoMode(QLineEdit.Password)
+        folder=QLineEdit(); folder.setPlaceholderText('Local project cache folder')
+        for title,widget in [('Host address',url),('Access token',token),('Local cache',folder)]: layout.addWidget(label(title)); layout.addWidget(widget)
+        if self.project and self.project.setting('team_remote'):
+            url.setText(self.project.setting('team_remote')); folder.setText(str(self.project.root))
+        def browse():
+            path=QFileDialog.getExistingDirectory(dialog,'Choose a private local project cache folder')
+            if path: folder.setText(path)
+        layout.addWidget(button('Choose local folder…',browse))
+        info=label('Images are downloaded from your chosen host as you open them. Tokens stay in memory. Use HTTPS or a trusted LAN/VPN.'); info.setWordWrap(True); layout.addWidget(info)
+        buttons=QDialogButtonBox(QDialogButtonBox.Cancel); buttons.addButton('Connect',QDialogButtonBox.AcceptRole)
+        buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject); layout.addWidget(buttons)
+        if dialog.exec()!=QDialog.Accepted: return
+        try:
+            client=TeamClient(url.text().strip(),token.text().strip())
+            if not token.text().strip() or not folder.text().strip(): raise ValueError('Enter your token and a local cache folder')
+            root=Path(folder.text()).resolve()
+            if (root/'project.sqlite3').exists():
+                check=Project(root,create=False)
+                try:
+                    if check.setting('team_remote')!=client.url: raise ValueError('Choose a new cache folder or the cache for this host')
+                finally: check.close()
+            elif root.exists() and any(root.iterdir()): raise ValueError('Use an empty folder for a new team cache')
+        except Exception as e: self.fail('Cannot connect',e); return
+        def connect(cancel,progress):
+            # Authenticate before creating any cache.
+            client.request('/meta')
+            project=Project(root); project.set_setting('team_remote',client.url); project.close()
+            sync_replica(root,client,cancel,progress)
+            return root,client
+        self.start_job('join',connect)
+
+    def sync_team(self):
+        if not self.team_client:
+            if self.project and self.project.setting('team_remote'): self.join_team()
+            return
+        if self.sync_job or self.job or not self.project: return
+        if not self.save(): return
+        root=self.project.root; client=self.team_client
+        self.sync_job=Job(lambda cancel,progress:sync_replica(root,client,cancel,progress))
+        self.sync_job.events.result.connect(self.sync_result); self.sync_job.events.error.connect(self.sync_error)
+        self.sync_job.events.finished.connect(self.sync_finished)
+        self.sync_button.setText('Syncing…'); self.pool.start(self.sync_job)
+
+    @Slot(object)
+    def sync_result(self,result):
+        current_id=self.current['id'] if self.current else None
+        # Do not reset list selection on every timer tick.
+        if self.model.total!=self.project.query(self.search.text(),self.filter.currentData(),count=True): self.refresh_images()
+        else: self.model.invalidate()
+        self.refresh_labels()
+        if current_id in result['changed'] and not self.dirty: self.reload_current()
+        if result['conflicts']:
+            self.notice(f"{len(result['conflicts'])} image conflict(s). Open Team → resolve to choose a version.")
+            self.sync_button.setText('Resolve conflicts')
+        else:
+            queued=self.project.conn.execute('SELECT COUNT(*) FROM team_links WHERE dirty=1').fetchone()[0]
+            self.notice('Team synced · '+result['meta']['reviewer'])
+            if not self.dirty: self.set_save_state('Queued for sync' if queued else 'Synced to team')
+
+    @Slot(str)
+    def sync_error(self,error):
+        self.notice(f'Team offline / sync failed: {error}. Local work is retained.')
+        self.sync_button.setText('Retry sync')
+
+    @Slot()
+    def sync_finished(self):
+        self.sync_job=None
+        if self.sync_button.text()=='Syncing…': self.sync_button.setText('Sync')
+
+    def reload_current(self):
+        if not self.current: return
+        anns,negative,recovered,revision=self.project.load_document(self.current['id'])
+        self.current=dict(self.project.image(self.current['id']))
+        self.current_revision=revision
+        self.document=Document(anns,negative); self.dirty=recovered
+        self.canvas.set_annotations(anns); self.sync_inspector(); self.model.invalidate()
+
+    def team_dialog(self):
+        if not self.project: return
+        if self.project.setting('team_remote'):
+            self.team_client_dialog(); return
+        dialog=QDialog(self); dialog.setWindowTitle('Team workspace'); dialog.resize(620,560)
+        layout=QVBoxLayout(dialog); layout.addWidget(label('Work together, on your host.','cardTitle'))
+        if self.current and self.dirty:
+            latest=self.project.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(self.current['id'],)).fetchone()[0]
+            if latest!=self.current_revision:
+                layout.addWidget(label('The current image changed on the team while you were editing.'))
+                layout.addWidget(button('Resolve my current image…',lambda:(dialog.accept(),self.resolve_owner_conflict())))
+        info=label('This computer owns the project. Teammates connect with individual reviewer tokens. Stop hosting to disconnect access.'); info.setWordWrap(True); layout.addWidget(info)
+        host=QLineEdit('0.0.0.0'); host.setPlaceholderText('Listen address'); port=QLineEdit('8765')
+        row=QHBoxLayout(); row.addWidget(label('Listen')); row.addWidget(host); row.addWidget(label('Port')); row.addWidget(port); layout.addLayout(row)
+        status=label('Hosting is stopped'); layout.addWidget(status)
+        def toggle():
+            if self.host:
+                self.host.stop(); self.host=None; status.setText('Hosting stopped'); start.setText('Start hosting'); return
+            if not self.save(): return
+            try:
+                self.host=TeamServer(self.project.root,host.text().strip(),int(port.text())).start()
+                self.project.set_setting('mode','team')
+                status.setText(f'Listening on port {self.host.server_address[1]}. Share your LAN IP with teammates.')
+                start.setText('Stop hosting')
+            except Exception as e: self.fail('Could not start host',e)
+        start=button('Stop hosting' if self.host else 'Start hosting',toggle,True); layout.addWidget(start)
+        if self.host: status.setText(f'Hosting on port {self.host.server_address[1]}')
+        layout.addWidget(label('REVIEWERS','section')); members=QListWidget(); layout.addWidget(members)
+        def refresh():
+            members.clear()
+            for member in self.project.conn.execute('SELECT id,name,active FROM team_members ORDER BY name'):
+                item=QListWidgetItem(member['name']+('' if member['active'] else ' · revoked')); item.setData(Qt.UserRole,member['id']); members.addItem(item)
+        def invite():
+            name,ok=QInputDialog.getText(dialog,'Invite reviewer','Reviewer name')
+            if not ok: return
+            try: access=add_member(self.project.root,name)
+            except Exception as e: self.fail('Cannot invite',e); return
+            token_dialog=QDialog(dialog); token_dialog.setWindowTitle('Reviewer access token'); token_layout=QVBoxLayout(token_dialog)
+            token_layout.addWidget(label('Share privately with this reviewer. It is displayed only now.'))
+            field=QLineEdit(access); field.setReadOnly(True); field.setMinimumWidth(440); token_layout.addWidget(field)
+            token_layout.addWidget(button('Close',token_dialog.accept)); token_dialog.exec(); refresh()
+        def revoke():
+            item=members.currentItem()
+            if not item: return
+            if QMessageBox.question(dialog,'Revoke access','Revoke this reviewer token? Their existing work remains in the project.')!=QMessageBox.Yes: return
+            with self.project.conn: self.project.conn.execute('UPDATE team_members SET active=0 WHERE id=?',(item.data(Qt.UserRole),))
+            refresh()
+        row=QHBoxLayout(); row.addWidget(button('Invite reviewer',invite)); row.addWidget(button('Revoke selected',revoke)); layout.addLayout(row); refresh()
+        note=label('Built-in desktop hosting uses HTTP on a trusted LAN/VPN. For TLS, use the CLI host command with a certificate.'); note.setWordWrap(True); layout.addWidget(note)
+        layout.addWidget(button('Done',dialog.accept)); dialog.exec()
+
+    def resolve_owner_conflict(self):
+        if not self.current: return
+        box=QMessageBox(self); box.setWindowTitle('Resolve changed image')
+        box.setText('The team saved a newer version. Choose which version to keep. Previous saved versions remain in project history.')
+        mine=box.addButton('Publish my version',QMessageBox.AcceptRole)
+        theirs=box.addButton('Use team version',QMessageBox.DestructiveRole)
+        box.addButton(QMessageBox.Cancel); box.exec()
+        if box.clickedButton()==mine:
+            self.current_revision=self.project.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(self.current['id'],)).fetchone()[0]
+            self.save()
+        elif box.clickedButton()==theirs:
+            with self.project.conn: self.project.conn.execute('DELETE FROM drafts WHERE image_id=?',(self.current['id'],))
+            self.reload_current(); self.set_save_state('Saved')
+
+    def team_client_dialog(self):
+        dialog=QDialog(self); dialog.setWindowTitle('Team sync & conflicts'); dialog.resize(630,480); layout=QVBoxLayout(dialog)
+        layout.addWidget(label(self.project.setting('name',self.project.root.name),'cardTitle'))
+        layout.addWidget(label(self.project.setting('team_remote')))
+        conflicts=QListWidget(); layout.addWidget(conflicts)
+        for row in self.project.conn.execute('SELECT images.id,images.path FROM team_links JOIN images ON images.id=team_links.image_id WHERE conflict=1'):
+            item=QListWidgetItem(Path(row['path']).name); item.setData(Qt.UserRole,row['id']); conflicts.addItem(item)
+        if not conflicts.count(): layout.addWidget(label('No conflicts. Each saved image is synchronized in the background.'))
+        layout.addWidget(button('Reconnect with reviewer token…',lambda:(dialog.accept(),self.join_team())))
+        def resolve(keep):
+            if self.sync_job or self.job: self.notice('Wait for the current sync to finish.'); return
+            if not self.team_client or not conflicts.currentItem(): return
+            ident=conflicts.currentItem().data(Qt.UserRole)
+            message='Publish your local version over the current team version?' if keep else 'Use the team version? Your local conflicting version will be replaced.'
+            if QMessageBox.question(dialog,'Resolve conflict',message)!=QMessageBox.Yes: return
+            root=self.project.root; client=self.team_client
+            dialog.accept()
+            self.start_job('resolve',lambda cancel,progress:resolve_conflict(root,ident,client,keep))
+        row=QHBoxLayout(); row.addWidget(button('Use team version',lambda:resolve(False))); row.addWidget(button('Publish my version',lambda:resolve(True))); layout.addLayout(row)
+        layout.addWidget(button('Close',dialog.accept)); dialog.exec()
 
     def toggle_theme(self):
         self.dark=not self.dark; self.settings.setValue('dark',self.dark); apply_theme(QApplication.instance(),self.dark)
@@ -618,12 +893,16 @@ class Main(QMainWindow):
         buttons.accepted.connect(accept); buttons.rejected.connect(dialog.reject); dialog.exec()
 
     def closeEvent(self,event):
+        if self.sync_job:
+            self.sync_job.cancel.set(); self.notice('Waiting for the current team request to finish.'); event.ignore(); return
         if self.job or self.loader.active:
             self.cancel_job(); self.loader.pending=None
             self.notice('Finishing the active file operation. Close again when it has stopped.'); event.ignore(); return
         if not self.save():
             self.fail('Cannot close safely','Saving failed. Your edits remain in this window. Resolve disk space or permissions and try Save again.'); event.ignore(); return
         self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('splitter',self.splitter.saveState())
+        self.sync_timer.stop()
+        if self.host: self.host.stop(); self.host=None
         if self.project: self.project.close(); self.project=None
         QApplication.instance().removeEventFilter(self); event.accept()
 

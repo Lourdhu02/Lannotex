@@ -2,18 +2,27 @@ from PySide6.QtGui import QColor, QPalette
 
 
 def apply_theme(app, dark=True):
-    bg, panel, raised = ('#1d232c','#242c37','#303b49') if dark else ('#f2f4f7','#ffffff','#e7edf2')
-    text, muted, border = ('#e6edf5','#9caebe','#384656') if dark else ('#202c38','#526678','#d7dfe6')
-    accent = '#37b8a5' if dark else '#187f70'
+    bg, panel, raised = ('#141414','#1b1b1b','#292929') if dark else ('#fafafa','#ffffff','#f0f0f0')
+    text, muted, border = ('#eeeeee','#999999','#333333') if dark else ('#181818','#707070','#e3e3e3')
+    accent, on_accent = ('#eeeeee','#171717') if dark else ('#202020','#ffffff')
     palette=QPalette()
     for role,color in [(QPalette.Window,bg),(QPalette.WindowText,text),(QPalette.Base,panel),
                        (QPalette.AlternateBase,raised),(QPalette.Text,text),(QPalette.Button,panel),
-                       (QPalette.ButtonText,text),(QPalette.Highlight,accent),(QPalette.HighlightedText,'#ffffff'),
+                       (QPalette.ButtonText,text),(QPalette.Highlight,accent),(QPalette.HighlightedText,on_accent),
                        (QPalette.ToolTipBase,panel),(QPalette.ToolTipText,text)]: palette.setColor(role,QColor(color))
     app.setPalette(palette)
     app.setStyleSheet(f'''
         QWidget {{ font-family: "Segoe UI"; font-size: 10pt; color: {text}; }}
-        QMainWindow, QDialog {{ background: {bg}; }}
+        QMainWindow, QDialog, QWidget#home, QWidget#workspace {{ background: {bg}; }}
+        QWidget#rail {{ background:{panel}; border-right:1px solid {border}; }}
+        QFrame#card {{ background:{panel}; border:1px solid {border}; border-radius:12px; }}
+        QLabel#hero {{ font-size:30pt; font-weight:600; letter-spacing:-1px; }}
+        QLabel#subtitle {{ font-size:12pt; color:{muted}; }}
+        QLabel#cardTitle {{ font-size:14pt; font-weight:600; }}
+        QPushButton#nav {{ text-align:left; padding:12px 16px; border:0; background:transparent; }}
+        QPushButton#nav:hover {{ background:{raised}; }}
+        QPushButton#pipeline {{ text-align:left; padding:0; border-radius:10px; min-height:112px; }}
+        QPushButton#pipeline:checked {{ border:2px solid {accent}; background:{raised}; color:{text}; }}
         QFrame#header {{ background:{panel}; border-bottom:1px solid {border}; }}
         QFrame#panel, QScrollArea {{ background:{panel}; border:1px solid {border}; border-radius:8px; }}
         QLabel#brand {{ font-size:19pt; font-weight:700; }}
@@ -23,8 +32,8 @@ def apply_theme(app, dark=True):
         QPushButton, QToolButton {{ background:{panel}; border:1px solid {border}; border-radius:5px; padding:7px 11px; }}
         QPushButton:hover, QToolButton:hover {{ background:{raised}; border-color:{muted}; }}
         QPushButton:pressed, QToolButton:checked {{ background:{raised}; border-color:{accent}; color:{accent}; }}
-        QPushButton#primary {{ background:{accent}; border-color:{accent}; color:white; font-weight:600; }}
-        QPushButton#danger {{ color:#df8b87; }}
+        QPushButton#primary {{ background:{accent}; border-color:{accent}; color:{on_accent}; font-weight:600; }}
+        QPushButton#danger {{ color:{text}; }}
         QPushButton:disabled, QToolButton:disabled {{ color:{muted}; border-color:{border}; }}
         QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QKeySequenceEdit {{ background:{bg}; border:1px solid {border}; border-radius:5px; padding:7px; selection-background-color:{accent}; }}
         QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {{ border-color:{accent}; }}

@@ -54,6 +54,8 @@ def import_images(root, sources, cancel, progress):
                 with Image.open(path) as im:
                     width, height = im.size
                     if im.getexif().get(274,1) in (5,6,7,8): width,height = height,width
+                # PNG EXIF lookup may consume the file; verify needs a fresh reader.
+                with Image.open(path) as im:
                     im.verify()
                 batch.append((project.reference(path),width,height))
             except Exception as error:
