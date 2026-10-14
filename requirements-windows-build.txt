@@ -1,13 +1,13 @@
 # Complete Windows packaging dependency set; isolated from global Python packages.
-setuptools==80.9.0
+setuptools==84.0.0
 packaging==26.3
 PySide6==6.8.3
 PySide6-Addons==6.8.3
 PySide6-Essentials==6.8.3
 shiboken6==6.8.3
-Pillow==11.1.0
-pyinstaller==6.11.1
+Pillow==12.3.0
+pyinstaller==6.22.3
 pyinstaller-hooks-contrib==2026.8
 altgraph==0.17.5
-pefile==2023.2.7
+pefile==2024.8.26
 pywin32-ctypes==0.2.3
