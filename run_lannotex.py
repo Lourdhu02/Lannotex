@@ -1,4 +1,4 @@
-from labelreview.app import main
+from lannotex.app import main
 
 if __name__ == "__main__":
     main()

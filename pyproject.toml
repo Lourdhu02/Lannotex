@@ -3,23 +3,71 @@ requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "labelreview-desktop"
-version = "0.0.1"
-description = "Fast local image annotation desktop application"
+name = "lannotex"
+version = "0.0.2"
+description = "Fast, offline-first image annotation for classifications, boxes, and polygons."
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE", "LICENSES/THIRD_PARTY_NOTICES.md"]
+authors = [{ name = "Lannotex contributors" }]
+keywords = ["annotation", "labeling", "computer-vision", "yolo", "coco", "labelme", "qt", "pyside6", "machine-learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: MacOS X",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
 dependencies = ["PySide6==6.8.3", "Pillow==11.1.0"]
 
 [project.optional-dependencies]
-dev = ["pytest==8.3.4", "pyinstaller==6.11.1"]
+dev = [
+    "pytest==8.3.4",
+    "pyinstaller==6.11.1",
+    "ruff==0.11.2",
+    "build==1.2.2.post1",
+    "twine==6.1.0",
+]
 
 [project.scripts]
-labelreview = "labelreview.app:main"
+lannotex = "lannotex.cli:main"
+lannotex-gui = "lannotex.app:main"
+
+[project.urls]
+Homepage = "https://github.com/Lannotex/Lannotex"
+Source = "https://github.com/Lannotex/Lannotex"
+Issues = "https://github.com/Lannotex/Lannotex/issues"
+Documentation = "https://github.com/Lannotex/Lannotex#readme"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+lannotex = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+exclude = ["build", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E9", "F"]
+

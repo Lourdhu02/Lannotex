@@ -1,4 +1,4 @@
-"""LabelReview Desktop: local project orchestration and native Qt workspace."""
+"""Lannotex Desktop: local project orchestration and native Qt workspace."""
 from __future__ import annotations
 from copy import deepcopy
 import json
@@ -8,8 +8,8 @@ import sys
 import uuid
 from PySide6.QtCore import QEvent, QModelIndex, QSettings, Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QKeySequence
-from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QColorDialog, QComboBox,
-    QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout,
+from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
+    QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
     QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel, QLineEdit, QListView, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
     QSplitter, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
@@ -42,9 +42,9 @@ def label(text, style='muted'):
 class Main(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('LabelReview Desktop · 0.0.1')
+        self.setWindowTitle('Lannotex Desktop · 0.0.2')
         self.resize(1440,940); self.setMinimumSize(900,620)
-        self.settings = QSettings('LabelReview','Desktop')
+        self.settings = QSettings('Lannotex','Desktop')
         self.bindings = dict(DEFAULT_KEYS)
         self.bindings.update(self.settings.value('keys',{},type=dict))
         self.dark = self.settings.value('dark',True,type=bool)
@@ -68,7 +68,7 @@ class Main(QMainWindow):
     def _build_ui(self):
         root = QWidget(); outer = QVBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
         header=QFrame(); header.setObjectName('header'); bar=QHBoxLayout(header); bar.setContentsMargins(20,14,20,14)
-        brand=QVBoxLayout(); brand.setSpacing(1); brand.addWidget(label('LabelReview','brand')); brand.addWidget(label('DESKTOP  /  LOCAL WORKSPACE'))
+        brand=QVBoxLayout(); brand.setSpacing(1); brand.addWidget(label('Lannotex','brand')); brand.addWidget(label('DESKTOP  /  LOCAL WORKSPACE'))
         bar.addLayout(brand); bar.addSpacing(28)
         self.project_title=label('No project open'); bar.addWidget(self.project_title,1)
         bar.addWidget(button('New project',self.new_project)); bar.addWidget(button('Open',self.open_project))
@@ -177,7 +177,7 @@ class Main(QMainWindow):
         add(view,'Previous image',lambda:self.navigate(-1),'previous'); add(view,'Next image',lambda:self.navigate(1),'next')
         for mode in ('select','box','polygon'): add(view,mode.title()+' tool',lambda checked=False,m=mode:self.set_tool(m),mode)
         helpmenu=self.menuBar().addMenu('Help'); add(helpmenu,'Keyboard & preferences',self.preferences)
-        add(helpmenu,'About LabelReview',lambda:QMessageBox.information(self,'LabelReview Desktop','LabelReview Desktop 0.0.1\nLocal image annotation. No login, telemetry or uploads.\n\nDisplay previews are capped at 2560 px. Geometry uses original dimensions.'))
+        add(helpmenu,'About Lannotex',lambda:QMessageBox.information(self,'Lannotex Desktop','Lannotex Desktop 0.0.2\nLocal image annotation. No login, telemetry or uploads.\n\nDisplay previews are capped at 2560 px. Geometry uses original dimensions.'))
         self.update_action_labels()
 
     def update_action_labels(self):
@@ -204,7 +204,7 @@ class Main(QMainWindow):
 
     def set_save_state(self, text):
         self.save_badge.setText(text)
-        self.setWindowTitle(f"{'● ' if self.dirty else ''}LabelReview Desktop · {self.project.root.name if self.project else '0.0.1'}")
+        self.setWindowTitle(f"{'● ' if self.dirty else ''}Lannotex Desktop · {self.project.root.name if self.project else '0.0.2'}")
 
     def refresh_controls(self):
         opened=self.project is not None; ready=opened and self.current is not None and not self.loading and self.canvas.image is not None
@@ -629,14 +629,14 @@ class Main(QMainWindow):
 
 
 def main():
-    app=QApplication(sys.argv); app.setOrganizationName('LabelReview'); app.setApplicationName('LabelReview Desktop')
+    app=QApplication(sys.argv); app.setOrganizationName('Lannotex'); app.setApplicationName('Lannotex Desktop')
     app.setStyle('Fusion'); app.setFont(QFont('Segoe UI',10))
     window=Main(); window.show()
     # A bounded test must actually enter the Qt event loop and report completion.
     if '--smoke-test' in sys.argv:
         def done():
-            target=os.environ.get('LABELREVIEW_SMOKE_RESULT')
-            if target: atomic_text(target,json.dumps({'version':'0.0.1','window_visible':window.isVisible(),'qt_event_loop':True}))
+            target=os.environ.get('LANNOTEX_SMOKE_RESULT')
+            if target: atomic_text(target,json.dumps({'version':'0.0.2','window_visible':window.isVisible(),'qt_event_loop':True}))
             window.close()
         QTimer.singleShot(300,done)
     raise SystemExit(app.exec())

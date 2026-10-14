@@ -22,7 +22,7 @@ MIGRATIONS = [
 def atomic_text(path, text):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp = tempfile.mkstemp(prefix='.labelreview-', dir=path.parent)
+    fd, temp = tempfile.mkstemp(prefix='.lannotex-', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8', newline='') as stream:
             stream.write(text)
@@ -54,7 +54,7 @@ class Project:
         with self.conn:
             self.conn.execute('CREATE TABLE IF NOT EXISTS migrations(version INTEGER PRIMARY KEY)')
             done = {r[0] for r in self.conn.execute('SELECT version FROM migrations')}
-            if done and max(done) > len(MIGRATIONS): raise ValueError('Project requires a newer LabelReview version')
+            if done and max(done) > len(MIGRATIONS): raise ValueError('Project requires a newer Lannotex version')
             for version, statements in enumerate(MIGRATIONS, 1):
                 if version not in done:
                     for sql in statements: self.conn.execute(sql)

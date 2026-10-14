@@ -1,7 +1,6 @@
 """Local editable exports. No company approval or release status is implied."""
 from __future__ import annotations
 import csv
-import io
 import json
 from pathlib import Path
 import tempfile
@@ -19,10 +18,10 @@ def labelme_data(image_path, width, height, annotations, negative=False):
             points = [[x*width,y*height],[r*width,b*height]]
         else: points = [[x*width,y*height] for x,y in a.geometry]
         shapes.append({'label':a.label,'points':points,'shape_type':'rectangle' if a.kind=='box' else 'polygon',
-                       'flags':{},'group_id':None,'labelreview_id':a.id})
+                       'flags':{},'group_id':None,'lannotex_id':a.id})
     return {'version':'5.5.0','imageData':None,'imagePath':image_path,'imageWidth':width,'imageHeight':height,
             'flags':{a.label:True for a in annotations if a.kind=='classification'}, 'shapes':shapes,
-            'labelreview':{'version':'0.0.1','no_targets':negative,'editable':True}}
+            'lannotex':{'version':'0.0.2','no_targets':negative,'editable':True}}
 
 
 def labelme(path, image_path, width, height, annotations):
@@ -42,10 +41,10 @@ def parse_labelme(data):
             kind = 'box'
         elif kind == 'polygon': geometry = pts
         else: raise ValueError(f'Unsupported Labelme shape: {kind}')
-        annotations.append(Annotation(shape['label'],kind,geometry,shape.get('labelreview_id') or str(uuid.uuid4())))
+        annotations.append(Annotation(shape['label'],kind,geometry,shape.get('lannotex_id') or shape.get('labelreview_id') or str(uuid.uuid4())))
     for label,enabled in data.get('flags',{}).items():
         if enabled is True: annotations.append(Annotation(label,'classification'))
-    negative = bool(data.get('labelreview',{}).get('no_targets',False))
+    negative = bool(data.get('lannotex',{}).get('no_targets',False) or data.get('labelreview',{}).get('no_targets',False))
     errors = validate_all(annotations,{a.label for a in annotations},negative)
     if errors: raise ValueError('; '.join(errors))
     return annotations, negative
@@ -82,7 +81,7 @@ def export_project(root, destination, format_name, cancel, progress):
     project.conn.execute('BEGIN')
     destination = Path(destination)
     destination.mkdir(parents=True,exist_ok=True)
-    output = Path(tempfile.mkdtemp(prefix='LabelReview-partial-',dir=destination))
+    output = Path(tempfile.mkdtemp(prefix='Lannotex-partial-',dir=destination))
     summary = {'included':0,'unlabeled':0,'skipped':0,'unsupported_annotations':0,'errors':[], 'format':format_name}
     try:
         labels = [r['name'] for r in project.labels()]
@@ -140,7 +139,7 @@ def export_project(root, destination, format_name, cancel, progress):
                 stream.write(json.dumps([{'id':i+1,'name':s} for i,s in enumerate(labels)])+'}')
         atomic_text(output/'manifest.json',json.dumps({'version':'0.0.1','format_version':1,'editable_local_export':True,'image_policy':'Referenced, not copied','summary':summary},indent=2))
         if not summary.get('cancelled'):
-            final = destination/('LabelReview-export-'+uuid.uuid4().hex[:8]); output.rename(final); output=final
+            final = destination/('Lannotex-export-'+uuid.uuid4().hex[:8]); output.rename(final); output=final
         summary['path'] = str(output)
         return summary
     finally:

@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['run_labelreview.py'],
+    ['run_lannotex.py'],
     pathex=['src'],
     binaries=[],
     datas=[],
@@ -21,7 +21,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='LabelReview',
+    name='Lannotex',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -40,5 +40,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='LabelReview',
+    name='Lannotex',
 )
