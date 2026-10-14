@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lannotex"
-version = "0.0.2"
+dynamic = ["version"]
 description = "Fast, offline-first image annotation for classifications, boxes, and polygons."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -56,6 +56,9 @@ Changelog = "https://github.com/Lourdhu02/Lannotex/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+version = { attr = "lannotex.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
