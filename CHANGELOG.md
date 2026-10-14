@@ -4,6 +4,30 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Documentation site (MkDocs Material) with install, quick start, user guide, CLI
+  reference, and a LabelMe migration guide; deployed to GitHub Pages.
+- Issue forms, pull request template, Dependabot, and `CITATION.cff`.
+
+### Fixed
+
+- `pip install` / `uv tool install` failed on Python 3.14: runtime dependencies are now
+  ranges (`PySide6-Essentials>=6.8.3,<7`, `Pillow>=11.1`) instead of exact pins. The
+  smaller `PySide6-Essentials` replaces the full `PySide6` bundle.
+- Buttons and menus showed "Save  next" and "Keyboard  preferences": `&` is now escaped.
+- Test runs added temporary folders to the real recent-projects list. Settings are now
+  stored in an INI file, so tests can isolate them. Earlier preferences are not migrated.
+- Fonts follow the operating system instead of a hard-coded Segoe UI.
+- The class list no longer clips rows on newer Qt versions.
+- Version strings in exports, the team server, and window titles come from one place.
+
+### Changed
+
+- CI tests Python 3.11–3.14 and checks a `uv tool install` on every OS.
+
 ## [0.0.2] — 2026-10-14
 
 ### Desktop workflow refresh (local working tree)
