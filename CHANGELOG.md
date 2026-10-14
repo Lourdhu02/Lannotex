@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **YOLO export is ready to train with Ultralytics:** `images/` (hard-linked when
+  possible, otherwise copied), matching `labels/`, and a `data.yaml` with class names.
+  Images that haven't been annotated yet are left out, so they don't become false
+  negatives.
+
 ## [0.1.0] — 2026-10-14
 
 First public release on PyPI: `pip install lannotex` or `uv tool install lannotex`.

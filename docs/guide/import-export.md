@@ -5,7 +5,7 @@
 | Format | Contains | Use it for |
 | --- | --- | --- |
 | **Labelme JSON** | One JSON per image: boxes as `rectangle`, polygons, classes as `flags` | LabelMe and tools that read its format |
-| **YOLO boxes** | One `.txt` per image: `class cx cy w h`, normalized | YOLO detection training |
+| **YOLO boxes** | Ready-to-train Ultralytics dataset: `images/`, `labels/`, `data.yaml` | YOLO detection training |
 | **COCO JSON** | One `coco.json` with boxes, polygon segmentations, and areas | Detection and instance segmentation |
 | **Classification CSV** | One row per image, one 0/1 column per class | Image classification |
 | **Native JSONL** | Every annotation with its ID and status | Lossless backup and round-trips |
@@ -24,10 +24,11 @@ Lannotex-export-1a2b3c4d/
 ├── classification.csv
 ├── images.jsonl
 ├── annotations.jsonl
-└── 00000001_street.json   # per-image files (Labelme JSON / YOLO .txt)
+└── 00000001_street.json   # per-image files (Labelme JSON)
 ```
 
-Images are **referenced, not copied**: exported records point to the original files.
+Images are **referenced, not copied**: exported records point to the original files. YOLO
+is the exception, described below.
 
 ### What gets skipped
 
@@ -39,11 +40,30 @@ An image is left out of the export, and listed in `manifest.json`, if:
 
 Run **View → Analysis** or `lannotex analyze` beforehand to find these images.
 
-!!! note "Training with Ultralytics YOLO"
-    The YOLO export writes label files named `<id>_<image name>.txt` plus `classes.json`.
-    Ultralytics expects `images/` and `labels/` folders with matching file names and a
-    `data.yaml`, so you currently have to arrange those yourself. A ready-to-train layout is
-    planned.
+### YOLO: ready to train
+
+The YOLO export is a complete [Ultralytics](https://docs.ultralytics.com/datasets/detect/)
+dataset:
+
+```text
+Lannotex-export-1a2b3c4d/
+├── data.yaml              # path, train/val, class names
+├── images/00000001_street.jpg
+└── labels/00000001_street.txt   # class cx cy w h, normalized
+```
+
+```bash
+yolo detect train data=Lannotex-export-1a2b3c4d/data.yaml model=yolo11n.pt
+```
+
+- Images are **hard-linked** into `images/` when the export is on the same drive, so they
+  take no extra space. Otherwise they're copied. Your originals are never modified.
+- Images marked **No target objects** get an empty label file, so YOLO learns them as
+  background.
+- Images you haven't annotated yet are **left out**. If they were included, YOLO would
+  treat them as "nothing here".
+- `train` and `val` point at the same images. Split them yourself for a real evaluation.
+- If you move the export folder, update `path:` in `data.yaml`.
 
 ## Importing annotations
 

@@ -2,7 +2,9 @@
 from __future__ import annotations
 import csv
 import json
+import os
 from pathlib import Path
+import shutil
 import tempfile
 import uuid
 from . import __version__
@@ -76,6 +78,19 @@ def coco_record(image, annotations, labels):
     return {'images':[image],'categories':[{'id':i+1,'name':s} for i,s in enumerate(labels)],'annotations':output}
 
 
+def link_or_copy(source, target):
+    try: os.link(source, target)
+    except OSError: shutil.copy2(source, target)
+
+
+def yolo_data_yaml(root, labels):
+    names = '\n'.join(f'  {i}: {json.dumps(name)}' for i, name in enumerate(labels))
+    return ('# Ultralytics YOLO dataset exported by Lannotex.\n'
+            '# Train:  yolo detect train data=data.yaml model=yolo11n.pt\n'
+            "# Update 'path' if you move this folder. train and val use the same images; split them for real evaluation.\n"
+            f'path: {json.dumps(str(root))}\ntrain: images\nval: images\nnames:\n{names}\n')
+
+
 def export_project(root, destination, format_name, cancel, progress):
     """Stream a consistent DB snapshot; publish the completed directory by rename."""
     project = Project(root,create=False)
@@ -87,6 +102,8 @@ def export_project(root, destination, format_name, cancel, progress):
     try:
         labels = [r['name'] for r in project.labels()]
         atomic_text(output/'classes.json',json.dumps(labels,indent=2))
+        yolo = format_name == 'YOLO boxes'
+        if yolo: (output/'images').mkdir(); (output/'labels').mkdir()
         # Spool COCO arrays to disk, rather than keeping all annotations in RAM.
         with (output/'images.jsonl').open('w',encoding='utf-8') as ims, (output/'annotations.jsonl').open('w',encoding='utf-8') as anns, (output/'classification.csv').open('w',encoding='utf-8',newline='') as csvfile:
             writer = csv.writer(csvfile); writer.writerow(['image_id','image_path','status',*labels])
@@ -104,6 +121,10 @@ def export_project(root, destination, format_name, cancel, progress):
                     summary['skipped'] += 1
                     if len(summary['errors'])<100: summary['errors'].append(f"{row['path']}: {'; '.join(errors)}")
                     continue
+                if yolo and row['status']=='new':
+                    # YOLO reads an empty label file as "no objects"; never-annotated images would become false negatives.
+                    summary['unlabeled'] += 1
+                    continue
                 summary['included'] += 1
                 if row['status']=='new': summary['unlabeled'] += 1
                 name = f"{row['id']:08d}_{Path(row['path']).stem}"
@@ -112,9 +133,11 @@ def export_project(root, destination, format_name, cancel, progress):
                 ims.write(json.dumps(image)+'\n')
                 if format_name == 'Labelme JSON':
                     atomic_text(output/(name+'.json'),json.dumps(labelme_data(source,row['width'],row['height'],annotations,negative),indent=2))
-                elif format_name == 'YOLO boxes':
+                elif yolo:
                     lines = [yolo_line(a,labels.index(a.label)) for a in annotations if a.kind=='box']
-                    atomic_text(output/(name+'.txt'),'\n'.join(lines)+ ('\n' if lines else ''))
+                    source_path = project.resolve(row['path'])
+                    link_or_copy(source_path, output/'images'/(name+source_path.suffix.lower()))
+                    atomic_text(output/'labels'/(name+'.txt'),'\n'.join(lines)+ ('\n' if lines else ''))
                     summary['unsupported_annotations'] += sum(a.kind!='box' for a in annotations)
                 elif format_name == 'COCO JSON':
                     record = coco_record(image,annotations,labels)
@@ -138,9 +161,11 @@ def export_project(root, destination, format_name, cancel, progress):
                             stream.write(line.strip()); first=False
                     stream.write(sep)
                 stream.write(json.dumps([{'id':i+1,'name':s} for i,s in enumerate(labels)])+'}')
-        atomic_text(output/'manifest.json',json.dumps({'version':__version__,'format_version':1,'editable_local_export':True,'image_policy':'Referenced, not copied','summary':summary},indent=2))
+        policy = 'Hard-linked or copied into images/' if yolo else 'Referenced, not copied'
+        atomic_text(output/'manifest.json',json.dumps({'version':__version__,'format_version':1,'editable_local_export':True,'image_policy':policy,'summary':summary},indent=2))
         if not summary.get('cancelled'):
             final = destination/('Lannotex-export-'+uuid.uuid4().hex[:8]); output.rename(final); output=final
+            if yolo: atomic_text(output/'data.yaml', yolo_data_yaml(output.resolve(), labels))
         summary['path'] = str(output)
         return summary
     finally:

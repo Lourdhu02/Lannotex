@@ -91,7 +91,7 @@ Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.git
 | **Annotate** | Bounding boxes · polygons with vertex drag, insert, and delete · multi-label image classes · "no target" negatives · 100-step undo/redo · zoom under the pointer, pan, arrow-key nudging · focus mode · light and dark themes |
 | **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
 | **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
-| **Export** | Labelme JSON · YOLO · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
+| **Export** | Labelme JSON · ready-to-train YOLO (`images/`, `labels/`, `data.yaml`) · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
 | **Automate** | `lannotex export` and `lannotex analyze` run headless in CI, with no display needed |
 | **Collaborate** | Optional LAN host with per-reviewer tokens, background sync, revision conflicts you resolve explicitly, revocation, and an audit history |
 
@@ -139,8 +139,8 @@ hashes. There is no telemetry, no external AI service, and no automatic upload. 
 
 ## Roadmap
 
-Next up: a ready-to-train YOLO layout (`images/`, `labels/`, `data.yaml`), more LabelMe
-shape types, VOC and YOLO-seg export, and number-key label selection. See the
+Next up: more LabelMe shape types (points, lines, circles), VOC and YOLO-seg export, and
+number-key label selection. See the
 [roadmap](https://lourdhu02.github.io/Lannotex/ROADMAP/) and the
 [measured performance](https://lourdhu02.github.io/Lannotex/PERFORMANCE/).
 

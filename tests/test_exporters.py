@@ -1,6 +1,9 @@
 """Exporter primitives and headless project export."""
+import json
 from pathlib import Path
 import threading
+
+from PIL import Image
 
 from lannotex import __version__
 from lannotex.domain import Annotation
@@ -61,3 +64,27 @@ def test_export_project_empty_creates_manifest(tmp_path):
     assert (out / "classes.json").exists()
     assert (out / "manifest.json").exists()
     assert (out / "images.jsonl").exists()
+
+
+def test_yolo_export_is_ultralytics_ready(tmp_path):
+    src = tmp_path / "imgs"; src.mkdir()
+    Image.new("RGB", (200, 100)).save(src / "a.png")
+    Image.new("RGB", (50, 50)).save(src / "b.jpg")
+    Image.new("RGB", (50, 50)).save(src / "c.png")
+    root = tmp_path / "project"; p = Project(root); p.add_label("cat"); p.add_label("dog")
+    a = p.add_image(src / "a.png", 200, 100); b = p.add_image(src / "b.jpg", 50, 50); p.add_image(src / "c.png", 50, 50)
+    p.save_annotations(a, [Annotation("dog", "box", [.1, .2, .5, .6]), Annotation("cat", "polygon", [[0, 0], [1, 0], [1, 1]])])
+    p.save_annotations(b, [], negative=True)
+    p.close()
+
+    result = export_project(root, tmp_path / "out", "YOLO boxes", threading.Event(), lambda *args: None)
+    out = Path(result["path"])
+    assert result["included"] == 2 and result["unlabeled"] == 1 and result["unsupported_annotations"] == 1
+    images = sorted(f.name for f in (out / "images").iterdir())
+    labels = sorted(f.name for f in (out / "labels").iterdir())
+    assert [Path(n).stem for n in images] == [Path(n).stem for n in labels] and len(images) == 2
+    assert (out / "labels" / labels[0]).read_text() == "1 0.300000 0.400000 0.400000 0.400000\n"
+    assert (out / "labels" / labels[1]).read_text() == ""
+    data = (out / "data.yaml").read_text()
+    assert "train: images" in data and '0: "cat"' in data and '1: "dog"' in data
+    assert json.loads(data.split("path: ")[1].splitlines()[0]) == str(out.resolve())
