@@ -202,9 +202,9 @@ class Main(QMainWindow):
             slider.valueChanged.connect(self.adjustments_changed); vp.addWidget(slider); self.adjust_sliders[key]=(slider,value,default)
         vp.addWidget(button('Reset adjustments',self.reset_adjustments)); vp.addSpacing(8)
         self.minimap_check=QCheckBox('Minimap when zoomed in'); self.minimap_check.setChecked(self.canvas.show_minimap)
-        self.minimap_check.toggled.connect(lambda on:self.canvas.show_minimap!=on and self.toggle_minimap()); vp.addWidget(self.minimap_check)
+        self.minimap_check.toggled.connect(self.minimap_checked); vp.addWidget(self.minimap_check)
         self.grid_check=QCheckBox('Pixel grid from 1200%'); self.grid_check.setChecked(self.canvas.show_grid)
-        self.grid_check.toggled.connect(lambda on:self.canvas.show_grid!=on and self.toggle_grid()); vp.addWidget(self.grid_check)
+        self.grid_check.toggled.connect(self.grid_checked); vp.addWidget(self.grid_check)
         vp.addStretch(); self.adjustments_changed()
         self.docks={}
         for key,title,widget,area in [('dataset','Dataset',self.left,Qt.LeftDockWidgetArea),('inspector','Inspector',self.right,Qt.RightDockWidgetArea),
@@ -230,7 +230,8 @@ class Main(QMainWindow):
         file=self.menuBar().addMenu('Project')
         add(file,'New project…',self.new_project); add(file,'Open project…',self.open_project,'open')
         add(file,'Import image folder…',self.import_folder,'import'); add(file,'Import image files…',self.import_files)
-        add(file,'Import annotations…',self.import_annotation_dialog); file.addSeparator()
+        add(file,'Import annotations…',self.import_annotation_dialog)
+        add(file,'Import LabelMe folder…',lambda:self.import_annotation_dialog(folder=True)); file.addSeparator()
         add(file,'Save',self.save,'save'); add(file,'Save && next',self.save_next,'save_next')
         add(file,'Export…',self.export_dialog); add(file,'Backup project…',self.backup_dialog)
         add(file,'Restore backup…',self.restore_dialog); add(file,'Relink current image…',self.relink_dialog)
@@ -273,6 +274,8 @@ class Main(QMainWindow):
             if typing and key not in ('save','save_next'): return False
             if key in self.actions:
                 self.actions[key][2](); return True
+        if not typing and Qt.Key_1<=event.key()<=Qt.Key_9 and event.modifiers() in (Qt.NoModifier,Qt.KeypadModifier):
+            if self.pick_label(event.key()-Qt.Key_1): return True
         if not typing and event.key() in (Qt.Key_Left,Qt.Key_Right,Qt.Key_Up,Qt.Key_Down) and event.modifiers() in (Qt.NoModifier,Qt.ShiftModifier):
             self.nudge(event.key(), .01 if event.modifiers()==Qt.ShiftModifier else .001); return True
         return super().eventFilter(obj,event)
@@ -436,6 +439,12 @@ class Main(QMainWindow):
     def toggle_minimap(self):
         self.canvas.toggle_minimap(); self.settings.setValue('minimap',self.canvas.show_minimap)
         self.minimap_check.blockSignals(True); self.minimap_check.setChecked(self.canvas.show_minimap); self.minimap_check.blockSignals(False)
+
+    def minimap_checked(self,on):
+        if self.canvas.show_minimap!=on: self.toggle_minimap()
+
+    def grid_checked(self,on):
+        if self.canvas.show_grid!=on: self.toggle_grid()
 
     def toggle_grid(self):
         self.canvas.toggle_grid(); self.settings.setValue('pixel_grid',self.canvas.show_grid)
@@ -655,9 +664,10 @@ class Main(QMainWindow):
         root=self.project.root
         self.start_job('import',lambda cancel,progress:import_images(root,paths,cancel,progress))
 
-    def import_annotation_dialog(self):
+    def import_annotation_dialog(self,folder=False):
         if not self.project or self.job or self.project.setting('team_remote'): return
-        path,_=QFileDialog.getOpenFileName(self,'Import Labelme JSON or native annotations.jsonl','','Annotations (*.json *.jsonl)')
+        if folder: path=QFileDialog.getExistingDirectory(self,'Import a LabelMe folder (subfolders included)')
+        else: path,_=QFileDialog.getOpenFileName(self,'Import Labelme JSON or native annotations.jsonl','','Annotations (*.json *.jsonl)')
         if path and self.save():
             root=self.project.root; self.start_job('annotations',lambda cancel,progress:import_annotations(root,path,cancel,progress))
 
@@ -679,7 +689,9 @@ class Main(QMainWindow):
         if self.job_kind in ('import','annotations'):
             self.refresh_images(); self.refresh_labels()
             text=f"Imported {result['added']:,} images"+(' · cancelled' if result.get('cancelled') else '')
-            if result.get('errors'): self.show_report('Import summary',text+'\n\n'+'\n'.join(result['errors']))
+            shapes=result.get('skipped_shapes') or {}
+            details=([('Shapes skipped:\n'+'\n'.join(f'  {n:,} × {reason}' for reason,n in sorted(shapes.items())))] if shapes else [])+(['\n'.join(result['errors'])] if result.get('errors') else [])
+            if details: self.show_report('Import summary',text+'\n\n'+'\n\n'.join(details))
             self.notice(text)
         elif self.job_kind=='export':
             self.show_report('Export summary',f"Included: {result['included']}\nUnlabeled included: {result['unlabeled']}\nSkipped images: {result['skipped']}\nAnnotations unsupported by this format: {result['unsupported_annotations']}\nCancelled: {result.get('cancelled',False)}\n\n{result['path']}\n\n"+'\n'.join(result['errors']))
@@ -798,6 +810,18 @@ class Main(QMainWindow):
             self.pre_focus=self.dock_host.saveState()
             for dock in self.docks.values(): dock.hide()
         else: self.dock_host.restoreState(self.pre_focus)
+
+    def pick_label(self,index):
+        """Number keys: toggle a class in classification projects, otherwise choose the drawing label
+        (which relabels the selected shape, like choosing it in the label box)."""
+        if not self.project or not self.current or self.loading: return False
+        if self.project.setting('tasks',['box','polygon','classification'])==['classification']:
+            if index>=self.classes.count() or not self.classes.isEnabled(): return False
+            item=self.classes.item(index); item.setCheckState(Qt.Unchecked if item.checkState()==Qt.Checked else Qt.Checked)
+            return True
+        if index>=self.label_combo.count(): return False
+        self.label_combo.setCurrentIndex(index); self.notice(f'Label {index+1}: {self.label_combo.currentText()}')
+        return True
 
     def toggle_thumbnails(self):
         self.model.set_show_thumbnails(not self.model.show_thumbnails); self.settings.setValue('thumbnails',self.model.show_thumbnails)

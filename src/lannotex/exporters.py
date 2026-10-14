@@ -7,8 +7,10 @@ from pathlib import Path
 import shutil
 import tempfile
 import uuid
+from collections import Counter
+import math
 from . import __version__
-from .domain import Annotation, polygon_area, validate_all
+from .domain import Annotation, polygon_area, validate, validate_all
 from .storage import Project, atomic_text
 
 
@@ -31,20 +33,41 @@ def labelme(path, image_path, width, height, annotations):
     atomic_text(path,json.dumps(labelme_data(image_path,width,height,annotations),indent=2))
 
 
-def parse_labelme(data):
+def circle_polygon(center, edge, w, h, sides=32):
+    """LabelMe circles are (center, point on rim) in pixels; approximate in pixel space, then normalize."""
+    radius = math.dist(center, edge)
+    points = []
+    for i in range(sides):
+        t = 2*math.pi*i/sides
+        p = [min(1., max(0., (center[0]+radius*math.cos(t))/w)), min(1., max(0., (center[1]+radius*math.sin(t))/h))]
+        if not points or p != points[-1]: points.append(p)
+    if len(points) > 1 and points[0] == points[-1]: points.pop()
+    return points
+
+
+def parse_labelme(data, skipped=None):
+    """Return (annotations, negative). Shapes Lannotex cannot represent, or invalid ones, are dropped
+    and counted in `skipped` (a Counter) instead of rejecting the whole file."""
     w,h = data['imageWidth'],data['imageHeight']
     if not isinstance(w,(int,float)) or not isinstance(h,(int,float)) or w<=0 or h<=0:
         raise ValueError('Labelme image dimensions must be positive')
+    skipped = Counter() if skipped is None else skipped
     annotations = []
     for shape in data.get('shapes',[]):
-        pts = [[x/w,y/h] for x,y in shape['points']]
-        kind = shape.get('shape_type','polygon')
+        raw = shape.get('points') or []
+        pts = [[x/w,y/h] for x,y in raw]
+        kind = shape.get('shape_type') or 'polygon'
         if kind == 'rectangle' and len(pts)==2:
             geometry = [min(pts[0][0],pts[1][0]),min(pts[0][1],pts[1][1]),max(pts[0][0],pts[1][0]),max(pts[0][1],pts[1][1])]
             kind = 'box'
-        elif kind == 'polygon': geometry = pts
-        else: raise ValueError(f'Unsupported Labelme shape: {kind}')
-        annotations.append(Annotation(shape['label'],kind,geometry,shape.get('lannotex_id') or shape.get('labelreview_id') or str(uuid.uuid4())))
+        elif kind in ('polygon', 'rotation'): geometry = pts; kind = 'polygon'
+        elif kind == 'circle' and len(raw)==2: geometry = circle_polygon(raw[0], raw[1], w, h); kind = 'polygon'
+        else:
+            skipped[f'{kind} shapes (not supported yet)'] += 1; continue
+        a = Annotation(shape['label'],kind,geometry,shape.get('lannotex_id') or shape.get('labelreview_id') or str(uuid.uuid4()))
+        problems = validate(a, {a.label})
+        if problems: skipped[f'{kind}: {problems[0].lower()}'] += 1; continue
+        annotations.append(a)
     for label,enabled in data.get('flags',{}).items():
         if enabled is True: annotations.append(Annotation(label,'classification'))
     negative = bool(data.get('lannotex',{}).get('no_targets',False) or data.get('labelreview',{}).get('no_targets',False))
@@ -177,21 +200,29 @@ def import_annotations(root, source, cancel, progress):
     from PIL import Image
     project = Project(root,create=False)
     source = Path(source)
-    count,errors = 0,[]
+    count,errors,skipped = 0,[],Counter()
+    def note(where, error):
+        if len(errors)<100: errors.append(f'{where}: {error}')
     try:
         def records():
             if source.suffix=='.jsonl':
                 with source.open(encoding='utf-8') as stream:
-                    for line in stream:
-                        record=json.loads(line)
-                        yield record['image']['file_name'], record['image']['width'], record['image']['height'], [Annotation.from_dict(a) for a in record['annotations']], record['status']=='empty'
+                    for number,line in enumerate(stream,1):
+                        try:
+                            record=json.loads(line)
+                            yield record['image']['file_name'], record['image']['width'], record['image']['height'], [Annotation.from_dict(a) for a in record['annotations']], record['status']=='empty'
+                        except Exception as e: note(f'{source.name} line {number}', e)
             else:
-                files = sorted(source.glob('*.json')) if source.is_dir() else [source]
+                # One malformed file must not abort the rest of the folder.
+                files = sorted(source.rglob('*.json')) if source.is_dir() else [source]
                 for file in files:
-                    data = json.loads(file.read_text(encoding='utf-8'))
-                    if 'shapes' not in data: continue
-                    anns,neg = parse_labelme(data)
-                    yield str((file.parent/data['imagePath']).resolve()),data['imageWidth'],data['imageHeight'],anns,neg
+                    if cancel.is_set(): return
+                    try:
+                        data = json.loads(file.read_text(encoding='utf-8'))
+                        if not isinstance(data, dict) or 'shapes' not in data: continue
+                        anns,neg = parse_labelme(data, skipped)
+                        yield str((file.parent/data['imagePath']).resolve()),data['imageWidth'],data['imageHeight'],anns,neg
+                    except Exception as e: note(file, e)
         for path,w,h,annotations,negative in records():
             if cancel.is_set(): break
             try:
@@ -210,9 +241,8 @@ def import_annotations(root, source, cancel, progress):
                 ident=project.add_image(path,w,h)
                 project.save_annotations(ident,annotations,negative)
                 count+=1; progress(count,f'Imported annotations for {count} images')
-            except Exception as e:
-                if len(errors)<100: errors.append(f'{path}: {e}')
-        return {'added':count,'errors':errors,'cancelled':cancel.is_set()}
+            except Exception as e: note(path, e)
+        return {'added':count,'errors':errors,'cancelled':cancel.is_set(),'skipped_shapes':dict(skipped)}
     finally: project.close()
 
 

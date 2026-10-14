@@ -239,6 +239,22 @@ def test_icons_render_and_follow_the_theme(window,qt):
     assert w.undo_button.text()=='' and w.undo_button.accessibleName()=='Undo'
 
 
+def test_number_keys_pick_labels_and_toggle_classes(window,qt,tmp_path):
+    w=window; open_ready(w,qt,project(tmp_path)); w.activateWindow(); w.canvas.setFocus(); qt.processEvents()
+    QTest.keyClick(w.canvas,Qt.Key_2); assert w.label_combo.currentText()=='dog'
+    QTest.keyClick(w.canvas,Qt.Key_1); assert w.label_combo.currentText()=='cat'
+    QTest.keyClick(w.canvas,Qt.Key_9); assert w.label_combo.currentText()=='cat'  # no 9th label: ignored
+    w.search.setFocus(); QTest.keyClick(w.search,Qt.Key_2); assert w.search.text()=='2' and w.label_combo.currentText()=='cat'
+    w.search.clear(); w.filter_timer.stop()
+
+
+def test_number_keys_toggle_classes_in_classification_projects(window,qt,tmp_path):
+    w=window; open_ready(w,qt,project(tmp_path,('classification',))); w.activateWindow(); w.canvas.setFocus(); qt.processEvents()
+    QTest.keyClick(w.canvas,Qt.Key_2); assert w.classes.item(1).checkState()==Qt.Checked
+    assert [a.label for a in w.document.annotations]==['dog']
+    QTest.keyClick(w.canvas,Qt.Key_2); assert w.document.annotations==[]
+
+
 def test_detail_decode_respects_pixel_limit(tmp_path):
     from lannotex.workers import decode, decode_full
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)

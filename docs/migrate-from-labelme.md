@@ -6,8 +6,9 @@ and still hand files back to LabelMe users.
 ## Import a LabelMe folder
 
 1. Create a project (**Combined pipeline** enables every tool).
-2. Choose **Project → Import annotations…** and select the folder that contains your
-   LabelMe `.json` files.
+2. Choose **Project → Import LabelMe folder…** and select the folder that contains your
+   LabelMe `.json` files. Subfolders are included. Use **Import annotations…** for a single
+   file.
 3. Lannotex reads each file, finds the image through its `imagePath`, checks that the
    dimensions match, and creates any missing labels.
 
@@ -19,16 +20,19 @@ Your LabelMe JSON files and images are left untouched.
 | --- | --- |
 | `rectangle` shapes | Bounding boxes |
 | `polygon` shapes | Polygons |
+| `circle` shapes | Polygons (32 points around the circle) |
+| `rotation` (rotated rectangle) shapes | Polygons with the four corners |
 | `flags` set to `true` | Image classes |
 | Image files via `imagePath` | Referenced in place, not copied |
 
 !!! warning "Current limitations"
-    - Files containing `circle`, `line`, `linestrip`, `point`, or `mask` shapes are
-      rejected **as a whole file**, and the error list names them. Support for these
-      shapes is planned.
+    - `point`, `line`, `linestrip` and `mask` shapes are **skipped**. The rest of each file
+      still imports, and the import summary lists how many of each were skipped. Support
+      for these shapes is planned.
+    - Shapes with invalid geometry, such as a polygon with fewer than 3 points, are skipped
+      and listed the same way.
     - `imageData` embedded in the JSON isn't used. The image file must exist on disk.
     - `group_id`, `description`, and per-shape `flags` aren't imported.
-    - Only JSON files directly inside the chosen folder are read, not subfolders.
 
 ## Export back to LabelMe
 

@@ -140,8 +140,8 @@ hashes. There is no telemetry, no external AI service, and no automatic upload. 
 
 ## Roadmap
 
-Next up: more LabelMe shape types (points, lines, circles), VOC and YOLO-seg export, and
-number-key label selection. See the
+Next up: point, line, rotated-box, keypoint and brush-mask tools, per-object attributes,
+and VOC, YOLO-seg and YOLO-OBB export. See the
 [roadmap](https://lourdhu02.github.io/Lannotex/ROADMAP/) and the
 [measured performance](https://lourdhu02.github.io/Lannotex/PERFORMANCE/).
 

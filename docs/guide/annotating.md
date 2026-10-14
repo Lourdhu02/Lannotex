@@ -8,7 +8,10 @@
 | Box | ++b++ | Drag from one corner to the opposite corner. |
 | Polygon | ++p++ | Click to add vertices; ++enter++ finishes, ++escape++ cancels. |
 
-The label selected in the **Labels & annotations** panel is applied to new shapes.
+The label selected in the **Labels & annotations** panel is applied to new shapes. Press
+++1++–++9++ to choose the first nine labels, in alphabetical order. If a shape is selected,
+it is relabelled. In classification projects, the number keys toggle classes on the
+current image instead.
 
 ### Editing polygons
 

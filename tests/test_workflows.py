@@ -9,6 +9,23 @@ from lannotex.storage import Project
 from lannotex.workers import import_images
 
 
+def test_labelme_folder_import_is_recursive_and_survives_bad_files(tmp_path):
+    source=tmp_path/'labelme'; (source/'batch2').mkdir(parents=True)
+    for folder,name in [(source,'a.png'),(source/'batch2','b.png')]:
+        Image.new('RGB',(100,50)).save(folder/name)
+        shapes=[{'label':'cat','shape_type':'rectangle','points':[[10,10],[40,30]]},{'label':'eye','shape_type':'point','points':[[5,5]]}]
+        (folder/(Path(name).stem+'.json')).write_text(json.dumps({'imagePath':name,'imageWidth':100,'imageHeight':50,'shapes':shapes,'flags':{}}))
+    (source/'broken.json').write_text('{ not json')
+    root=tmp_path/'project'; Project(root).close()
+    result=import_annotations(root,source,threading.Event(),lambda *a:None)
+    assert result['added']==2
+    assert len(result['errors'])==1 and 'broken.json' in result['errors'][0]
+    assert result['skipped_shapes']=={'point shapes (not supported yet)':2}
+    p=Project(root,create=False)
+    assert sorted(a.kind for i in p.images() for a in p.load_annotations(i['id']))==['box','box']
+    p.close()
+
+
 def test_folder_import_export_all_formats_and_native_roundtrip(tmp_path):
     source=tmp_path/'images'; source.mkdir()
     Image.new('RGB',(200,100),'white').save(source/'image.png')

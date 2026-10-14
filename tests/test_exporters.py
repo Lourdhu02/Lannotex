@@ -36,6 +36,23 @@ def test_parse_labelme_accepts_legacy_labelreview_keys():
     assert anns[0].geometry == [.1, .2, .5, .8]
 
 
+def test_parse_labelme_converts_circles_and_rotations_and_skips_the_rest():
+    from collections import Counter
+    data = {"imageWidth": 200, "imageHeight": 100, "shapes": [
+        {"label": "ball", "shape_type": "circle", "points": [[100, 50], [120, 50]]},
+        {"label": "car", "shape_type": "rotation", "points": [[10, 10], [60, 20], [55, 45], [5, 35]]},
+        {"label": "nose", "shape_type": "point", "points": [[30, 30]]},
+        {"label": "lane", "shape_type": "linestrip", "points": [[0, 0], [50, 50], [90, 20]]},
+        {"label": "bad", "shape_type": "polygon", "points": [[0, 0], [10, 0]]},
+    ]}
+    skipped = Counter()
+    anns, negative = parse_labelme(data, skipped)
+    assert [(a.label, a.kind) for a in anns] == [("ball", "polygon"), ("car", "polygon")]
+    xs = [p[0]*200 for p in anns[0].geometry]; assert len(anns[0].geometry) == 32 and abs(max(xs)-120) < 1e-6
+    assert skipped == Counter({"point shapes (not supported yet)": 1, "linestrip shapes (not supported yet)": 1,
+                               "polygon: polygon needs 3–1000 vertices": 1})
+
+
 def test_parse_labelme_reads_legacy_no_targets_flag():
     data = {"imageWidth": 100, "imageHeight": 50, "shapes": [],
             "labelreview": {"no_targets": True}}

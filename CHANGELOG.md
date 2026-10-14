@@ -37,6 +37,23 @@ workspace you can arrange yourself.
   buttons have tooltips and screen-reader names.
 - **Command palette** (`Ctrl+K`): type part of any menu command, for example "zoom",
   "export" or "layout", and press Enter to run it.
+- **Number keys 1–9** choose the drawing label, which relabels the selected shape, or
+  toggle classes in classification projects.
+- **Project → Import LabelMe folder…** imports a whole folder, including subfolders.
+
+### Changed
+
+- **LabelMe import keeps going.**
+  - Circles and rotated rectangles are converted to polygons.
+  - Points, lines and masks, which Lannotex can't draw yet, are skipped and counted in the
+    import summary instead of rejecting the whole file.
+  - Invalid shapes are dropped one at a time.
+  - A malformed JSON file no longer stops the rest of the folder.
+
+### Fixed
+
+- PySide6 6.12.0 is excluded. On Linux with Python 3.11 it over-releases references on every
+  background job, which made Lannotex abort on exit. Versions 6.8.3–6.11 are unaffected.
 
 ## [0.1.1] — 2026-10-14
 
