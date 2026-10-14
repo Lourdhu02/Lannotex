@@ -1,10 +1,15 @@
 """Native canvas. Geometry lives in the document, never in disposable graphics items."""
 from copy import deepcopy
 import math
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 from .domain import Annotation, validate
+
+
+MAX_PIXEL_SCALE = 64
+GRID_FROM_SCALE = 12
+MINIMAP = QSizeF(200, 140)
 
 
 class Canvas(QWidget):
@@ -12,6 +17,7 @@ class Canvas(QWidget):
     selected = Signal(object)
     zoomed = Signal(int)
     message = Signal(str)
+    detail_wanted = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -36,11 +42,63 @@ class Canvas(QWidget):
         self.space = False
         self.empty_title = 'Your next dataset starts here'
         self.empty_detail = 'Create or open a project, then import your images.'
+        self.detail = None
+        self.source = None
+        self.detail_requested = False
+        self.show_minimap = True
+        self.show_grid = True
+        self.minimap_rect = QRectF()
+        self.minimap_drag = False
 
-    def set_image(self, image):
+    def set_image(self, image, source=None):
+        """`image` is a display preview; `source` is the original (width, height) after EXIF rotation."""
         self.cancel()
         self.image = image
+        self.detail = None
+        self.detail_requested = False
+        self.source = source or ((image.width(), image.height()) if image is not None else None)
         self.fit()
+
+    def set_detail(self, image):
+        self.detail = image
+        self.update()
+
+    def needs_detail(self):
+        return self.image is not None and self.source is not None and self.source[0] > self.image.width()
+
+    def source_scale(self):
+        """Screen pixels per original image pixel (1.0 = 100%)."""
+        if self.image is None or not self.source: return 1.
+        return self.image_rect().width() / self.source[0]
+
+    def base_scale(self):
+        w, h = self.image.width(), self.image.height()
+        return min(max(1, self.width()-64)/w, max(1, self.height()-64)/h)
+
+    def set_zoom(self, zoom, anchor=None):
+        if self.image is None: return
+        top = MAX_PIXEL_SCALE * self.source[0] / (self.image.width() * self.base_scale())
+        anchor = anchor if anchor is not None else QPointF(self.width()/2, self.height()/2)
+        before = self.image_rect()
+        u = (anchor.x()-before.x())/before.width(); v = (anchor.y()-before.y())/before.height()
+        self.zoom = max(.1, min(max(1., top), zoom))
+        after = self.image_rect()
+        self.pan += QPointF(anchor.x()-(after.x()+u*after.width()), anchor.y()-(after.y()+v*after.height()))
+        self.zoomed.emit(round(self.source_scale()*100))
+        self.update()
+
+    def zoom_by(self, factor, anchor=None): self.set_zoom(self.zoom*factor, anchor)
+
+    def actual_pixels(self):
+        if self.image is not None: self.set_zoom(self.source[0] / (self.image.width() * self.base_scale()))
+
+    def center_on(self, nx, ny):
+        r = self.image_rect()
+        self.pan += QPointF(self.width()/2-(r.left()+nx*r.width()), self.height()/2-(r.top()+ny*r.height()))
+        self.update()
+
+    def toggle_minimap(self): self.show_minimap = not self.show_minimap; self.update()
+    def toggle_grid(self): self.show_grid = not self.show_grid; self.update()
 
     def set_annotations(self, annotations):
         self.annotations = deepcopy(annotations)
@@ -62,7 +120,7 @@ class Canvas(QWidget):
     def fit(self):
         self.zoom = 1.
         self.pan = QPointF()
-        self.zoomed.emit(100)
+        self.zoomed.emit(round(self.source_scale()*100))
         self.update()
 
     def image_rect(self):
@@ -105,9 +163,14 @@ class Canvas(QWidget):
             painter.drawText(self.rect().adjusted(24,50,-24,50), Qt.AlignCenter | Qt.TextWordWrap, self.empty_detail)
             return
         r = self.image_rect()
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, self.zoom < 2)
-        painter.drawImage(r, self.image)
+        scale = self.source_scale()
+        preview_scale = self.image.width() / self.source[0]
+        if self.detail is None and scale > preview_scale * 1.05 and self.needs_detail() and not self.detail_requested:
+            self.detail_requested = True; self.detail_wanted.emit()
+        use_detail = self.detail is not None and scale > preview_scale
+        self.draw_visible(painter, r, self.detail if use_detail else self.image)
         painter.setClipRect(r)
+        if self.show_grid and scale >= GRID_FROM_SCALE: self.draw_grid(painter, r, scale)
         shown = self.preview if self.preview is not None else self.annotations
         for n, a in enumerate(shown, 1):
             pts = self.vertices(a)
@@ -139,22 +202,69 @@ class Canvas(QWidget):
             painter.drawPolyline(QPolygonF([self.screen(p) for p in self.points]))
             for p in self.points:
                 painter.setBrush(QColor('#f4ba58')); painter.drawEllipse(self.screen(p), 3.5, 3.5)
+        self.draw_minimap(painter, r)
+
+    def draw_visible(self, painter, r, image):
+        """Draw only the on-screen part of the image; cost tracks the viewport, not the image size."""
+        visible = r.intersected(QRectF(self.rect()))
+        if visible.isEmpty(): return
+        sx, sy = image.width()/r.width(), image.height()/r.height()
+        source = QRectF((visible.left()-r.left())*sx, (visible.top()-r.top())*sy, visible.width()*sx, visible.height()*sy)
+        painter.save()
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, r.width()/image.width() < 3)
+        painter.drawImage(visible, image, source)
+        painter.restore()
+
+    def draw_grid(self, painter, r, scale):
+        visible = r.intersected(QRectF(self.rect()))
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setPen(QPen(QColor(16, 16, 16, 120), 1))
+        first_x = math.floor((visible.left()-r.left())/scale); last_x = math.ceil((visible.right()-r.left())/scale)
+        first_y = math.floor((visible.top()-r.top())/scale); last_y = math.ceil((visible.bottom()-r.top())/scale)
+        for i in range(first_x, last_x+1):
+            x = r.left()+i*scale; painter.drawLine(QPointF(x, visible.top()), QPointF(x, visible.bottom()))
+        for j in range(first_y, last_y+1):
+            y = r.top()+j*scale; painter.drawLine(QPointF(visible.left(), y), QPointF(visible.right(), y))
+        painter.restore()
+
+    def draw_minimap(self, painter, r):
+        self.minimap_rect = QRectF()
+        if not self.show_minimap or QRectF(self.rect()).contains(r): return
+        w, h = self.image.width(), self.image.height()
+        k = min(MINIMAP.width()/w, MINIMAP.height()/h)
+        box = QRectF(self.width()-w*k-14, self.height()-h*k-14, w*k, h*k)
+        self.minimap_rect = box
+        painter.save()
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.setOpacity(.92)
+        painter.fillRect(box.adjusted(-3, -3, 3, 3), self.palette().window())
+        painter.drawImage(box, self.image)
+        painter.setOpacity(1)
+        view = QRectF(self.rect()).intersected(r)
+        viewport = QRectF(box.left()+(view.left()-r.left())/r.width()*box.width(), box.top()+(view.top()-r.top())/r.height()*box.height(),
+                          view.width()/r.width()*box.width(), view.height()/r.height()*box.height())
+        if viewport.width() < 8 or viewport.height() < 8:
+            center = viewport.center(); viewport = QRectF(center.x()-4, center.y()-4, 8, 8)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(0, 0, 0, 160), 3)); painter.drawRect(viewport)
+        painter.setPen(QPen(QColor('#37b8a5'), 1.6)); painter.drawRect(viewport)
+        painter.setPen(QPen(self.palette().mid().color(), 1)); painter.drawRect(box.adjusted(-3, -3, 3, 3))
+        painter.restore()
+
+    def minimap_jump(self, pos):
+        box = self.minimap_rect
+        self.center_on(min(1, max(0, (pos.x()-box.left())/box.width())), min(1, max(0, (pos.y()-box.top())/box.height())))
 
     def wheelEvent(self, event):
         if self.image is None: return
-        before = self.image_rect()
-        pos = event.position()
-        u = (pos.x()-before.x())/before.width()
-        v = (pos.y()-before.y())/before.height()
-        self.zoom = max(.1, min(32., self.zoom * (1.15 if event.angleDelta().y()>0 else 1/1.15)))
-        after = self.image_rect()
-        self.pan += QPointF(pos.x()-(after.x()+u*after.width()), pos.y()-(after.y()+v*after.height()))
-        self.zoomed.emit(round(self.zoom*100))
-        self.update()
+        self.zoom_by(1.15 if event.angleDelta().y() > 0 else 1/1.15, event.position())
 
     def mousePressEvent(self, event):
         self.setFocus()
         if self.image is None: return
+        if event.button() == Qt.LeftButton and self.minimap_rect.contains(event.position()):
+            self.minimap_drag = True; self.minimap_jump(event.position()); return
         if event.button() == Qt.MiddleButton or (self.space and event.button() == Qt.LeftButton):
             self.drag = {'kind':'pan','start':event.position(),'pan':QPointF(self.pan)}
             self.setCursor(Qt.ClosedHandCursor)
@@ -185,6 +295,7 @@ class Canvas(QWidget):
         self.select(None)
 
     def mouseMoveEvent(self, event):
+        if self.minimap_drag: self.minimap_jump(event.position()); return
         if not self.drag: return
         d = self.drag
         if d['kind'] == 'pan':
@@ -211,6 +322,7 @@ class Canvas(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, event):
+        if self.minimap_drag: self.minimap_drag = False; return
         if not self.drag: return
         kind = self.drag['kind']
         self.drag = None

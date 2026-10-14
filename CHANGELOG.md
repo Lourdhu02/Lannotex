@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Full-resolution viewing.** Zooming in past the preview loads the original pixels in the
+  background, so large images stay sharp at any zoom. Only the visible region is drawn.
+  Detail decoding is capped at 64 MP to protect memory.
+- **Instant next/previous.** Neighbouring images are decoded ahead of time.
+- **Minimap** (`M`) for orientation and click-to-jump, and a **pixel grid** (`G`) from
+  1200% zoom upwards.
+- **Zoom controls:** actual pixels (`Ctrl+1`), zoom in/out (`Ctrl+=` / `Ctrl+-`) up to
+  6400%. The zoom readout now shows true pixel scale, so 100% means actual pixels.
+
 ## [0.1.1] — 2026-10-14
 
 ### Changed

@@ -28,7 +28,8 @@ COLORS = ['#37b8a5','#70a8f5','#d5a85a','#bf8bef','#ed8ca4','#74c9db','#9fbd68']
 DEFAULT_KEYS = {'save':'Ctrl+S','save_next':'Ctrl+Return','previous':'Alt+Left','next':'Alt+Right',
                 'undo':'Ctrl+Z','redo':'Ctrl+Shift+Z','delete':'Del','cancel':'Esc','finish':'Return',
                 'fit':'F','select':'V','box':'B','polygon':'P','duplicate':'Ctrl+D','redraw':'R',
-                'vertex':'Shift+Del','focus':'Ctrl+Shift+F','open':'Ctrl+O','import':'Ctrl+I'}
+                'vertex':'Shift+Del','focus':'Ctrl+Shift+F','open':'Ctrl+O','import':'Ctrl+I',
+                'zoom_in':'Ctrl+=','zoom_out':'Ctrl+-','actual':'Ctrl+1','minimap':'M','grid':'G'}
 
 
 def button(text, callback, primary=False):
@@ -60,6 +61,7 @@ class Main(QMainWindow):
         self.pool = QThreadPool(self); self.pool.setMaxThreadCount(1)
         self.loader = ImageLoader(self)
         self.loader.ready.connect(self.image_ready); self.loader.failed.connect(self.image_failed)
+        self.loader.detail_ready.connect(self.detail_ready); self.loader.detail_failed.connect(self.detail_failed)
         self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.save)
         self.filter_timer = QTimer(self); self.filter_timer.setSingleShot(True); self.filter_timer.timeout.connect(self.filter_images)
         self.actions = {}; self._build_ui(); self._build_menus()
@@ -124,6 +126,8 @@ class Main(QMainWindow):
         middle.addLayout(tools)
         self.canvas=Canvas(); self.canvas.edited.connect(self.commit); self.canvas.selected.connect(self.selection_changed)
         self.canvas.message.connect(self.notice); self.canvas.zoomed.connect(lambda n:self.zoom_label.setText(f'{n}%'))
+        self.canvas.detail_wanted.connect(self.request_detail)
+        self.canvas.show_minimap=self.settings.value('minimap',True,type=bool); self.canvas.show_grid=self.settings.value('pixel_grid',True,type=bool)
         middle.addWidget(self.canvas,1)
         self.canvas_hint=label('B  Draw box   ·   P  Draw polygon   ·   Space + drag  Pan   ·   F  Fit')
         self.canvas_hint.setWordWrap(True); middle.addWidget(self.canvas_hint)
@@ -192,7 +196,10 @@ class Main(QMainWindow):
                               ('vertex','Delete polygon vertex',self.canvas.delete_vertex),('cancel','Cancel drawing',self.canvas.cancel),
                               ('finish','Finish polygon',self.canvas.finish_polygon)]: add(edit,text,slot,key)
         view=self.menuBar().addMenu('View')
-        add(view,'Fit image',self.canvas.fit,'fit'); add(view,'Focus mode',self.toggle_focus,'focus')
+        add(view,'Fit image',self.canvas.fit,'fit'); add(view,'Actual pixels (100%)',self.canvas.actual_pixels,'actual')
+        add(view,'Zoom in',lambda:self.canvas.zoom_by(1.25),'zoom_in'); add(view,'Zoom out',lambda:self.canvas.zoom_by(1/1.25),'zoom_out')
+        add(view,'Show minimap',self.toggle_minimap,'minimap'); add(view,'Show pixel grid',self.toggle_grid,'grid'); view.addSeparator()
+        add(view,'Focus mode',self.toggle_focus,'focus')
         add(view,'Toggle light / dark',self.toggle_theme); add(view,'Analysis',self.show_analysis)
         add(view,'Previous image',lambda:self.navigate(-1),'previous'); add(view,'Next image',lambda:self.navigate(1),'next')
         for mode in ('select','box','polygon'): add(view,mode.title()+' tool',lambda checked=False,m=mode:self.set_tool(m),mode)
@@ -347,9 +354,37 @@ class Main(QMainWindow):
     @Slot(object,object)
     def image_ready(self,token,image):
         if token!=self.token: return
-        self.loading=False; self.canvas.set_image(image); self.refresh_controls()
+        source=(self.current['width'],self.current['height']) if self.current['width'] and self.current['height'] else None
+        self.loading=False; self.canvas.set_image(image,source); self.refresh_controls()
         self.notice(f"{self.current['width']} × {self.current['height']} px · full-resolution coordinates · local project")
         if self.dirty and self.settings.value('autosave',True,type=bool): self.timer.start(700)
+        self.prefetch_neighbors()
+
+    def prefetch_neighbors(self):
+        row=self.images.currentIndex().row(); paths=[]
+        for r in (row+1,row-1,row+2):
+            record=self.model.record(r)
+            if record:
+                path=self.project.resolve(record['path'])
+                if path.is_file(): paths.append(path)
+        self.loader.prefetch(paths)
+
+    def request_detail(self):
+        if self.current: self.loader.request_detail(self.token,self.project.resolve(self.current['path']))
+
+    @Slot(object,object)
+    def detail_ready(self,token,image):
+        if token==self.token: self.canvas.set_detail(image)
+
+    @Slot(object,str)
+    def detail_failed(self,token,error):
+        if token==self.token: self.notice(f'Showing the preview at this zoom: {error}')
+
+    def toggle_minimap(self):
+        self.canvas.toggle_minimap(); self.settings.setValue('minimap',self.canvas.show_minimap)
+
+    def toggle_grid(self):
+        self.canvas.toggle_grid(); self.settings.setValue('pixel_grid',self.canvas.show_grid)
 
     @Slot(object,str)
     def image_failed(self,token,error):
@@ -898,9 +933,10 @@ class Main(QMainWindow):
     def closeEvent(self,event):
         if self.sync_job:
             self.sync_job.cancel.set(); self.notice('Waiting for the current team request to finish.'); event.ignore(); return
-        if self.job or self.loader.active:
-            self.cancel_job(); self.loader.pending=None
+        if self.job:
+            self.cancel_job(); self.loader.stop()
             self.notice('Finishing the active file operation. Close again when it has stopped.'); event.ignore(); return
+        self.loader.stop()
         if not self.save():
             self.fail('Cannot close safely','Saving failed. Your edits remain in this window. Resolve disk space or permissions and try Save again.'); event.ignore(); return
         self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('splitter',self.splitter.saveState())

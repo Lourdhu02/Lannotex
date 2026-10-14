@@ -22,9 +22,12 @@ The label selected in the **Labels & annotations** panel is applied to new shape
 
 | Action | Control |
 | --- | --- |
-| Zoom | Mouse wheel (zooms under the pointer) |
-| Pan | Hold ++space++ and drag |
+| Zoom | Mouse wheel (zooms under the pointer), ++ctrl+equal++ / ++ctrl+minus++ |
+| Actual pixels (100%) | ++ctrl+1++ |
+| Pan | Hold ++space++ and drag, or click and drag in the minimap |
 | Fit to window | ++f++ |
+| Minimap on/off | ++m++ |
+| Pixel grid on/off (from 1200%) | ++g++ |
 | Nudge selection | Arrow keys (hold ++shift++ for a 10× step) |
 | Focus mode (hide panels) | ++ctrl+shift+f++ |
 
@@ -57,9 +60,11 @@ dataset:
 
 ## Coordinates
 
-Geometry is stored **normalized** (0–1) relative to the original image size. Large
-images are displayed as a preview capped at 2,560 px on the longest side, but stored
-coordinates and exports always use the original resolution. EXIF orientation is
-respected.
+Geometry is stored **normalized** (0–1) relative to the original image size. Images open
+as a fast preview (up to 2,560 px). When you zoom in past that, Lannotex loads the
+original pixels in the background, so the image stays sharp up to 6400%. The zoom
+readout shows true scale: 100% means one image pixel per screen pixel. Full-resolution
+detail is available for images up to 64 megapixels; larger images stay on the preview.
+EXIF orientation is respected.
 
 Undo history keeps the last 100 changes for the image you're working on.

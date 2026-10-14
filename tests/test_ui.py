@@ -128,6 +128,43 @@ def test_window_resizes_and_screenshot(window,qt,tmp_path):
     w.grab().save(str(artifact/'workspace-dark.png'))
 
 
+def large_project(tmp_path):
+    root=tmp_path/'large'; p=Project(root); p.add_label('cat'); p.set_setting('tasks',['box'])
+    for i,size in enumerate([(5000,1200),(800,600)]):
+        path=root/f'large-{i}.png'; Image.new('RGB',size,'#808080').save(path); p.add_image(path,*size)
+    p.close(); return root
+
+
+def test_full_resolution_detail_prefetch_minimap_and_grid(window,qt,tmp_path):
+    w=window; root=large_project(tmp_path); open_ready(w,qt,root)
+    c=w.canvas
+    assert c.image.width()==2560 and c.source==(5000,1200)
+    wait_for(qt,lambda:not w.loader.active)
+    neighbour=str(root/'large-1.png')
+    assert any(key[0]==neighbour for key in w.loader.cache), 'next image should be prefetched'
+
+    c.actual_pixels(); c.repaint()
+    assert abs(c.source_scale()-1)<0.01 and w.zoom_label.text()=='100%'
+    wait_for(qt,lambda:c.detail is not None)
+    assert c.detail.width()==5000 and c.detail.height()==1200
+
+    c.repaint(); assert not c.minimap_rect.isEmpty()
+    QTest.mouseClick(c,Qt.LeftButton,pos=c.minimap_rect.center().toPoint())
+    r=c.image_rect(); assert abs(r.center().x()-c.width()/2)<3
+    c.set_zoom(10_000); assert c.source_scale()<=64.01
+    c.repaint()  # pixel grid path at maximum zoom
+    w.toggle_minimap(); c.repaint(); assert c.minimap_rect.isEmpty()
+    w.toggle_minimap()
+
+
+def test_detail_decode_respects_pixel_limit(tmp_path):
+    from lannotex.workers import decode, decode_full
+    path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)
+    assert decode(path).width()==2560
+    assert decode_full(path).width()==3000
+    with pytest.raises(ValueError, match='detail limit'): decode_full(path, max_pixels=1_000_000)
+
+
 def test_team_client_download_edit_save_sync(window,qt,tmp_path):
     from lannotex.team import TeamServer, TeamClient, add_member, sync_replica
     import threading
