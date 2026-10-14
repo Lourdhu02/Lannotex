@@ -4,11 +4,24 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: monthly
+    groups:
+      # PySide6, its Essentials/Addons wheels, and shiboken6 must move in lockstep.
+      qt:
+        patterns: ["pyside6*", "shiboken6"]
+      python-tooling:
+        patterns: ["*"]
+        exclude-patterns: ["pyside6*", "shiboken6"]
   - package-ecosystem: pip
     directory: /docs
     schedule:
       interval: monthly
+    groups:
+      docs:
+        patterns: ["*"]
