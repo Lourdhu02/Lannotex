@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-14
+
+Viewing, speed and layout: sharp zoom on large images, instant navigation, and a
+workspace you can arrange yourself.
+
 ### Added
 
 - **Full-resolution viewing.** Zooming in past the preview loads the original pixels in the

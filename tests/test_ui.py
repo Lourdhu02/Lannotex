@@ -174,14 +174,16 @@ def test_image_adjustments_change_only_the_display(window,qt,tmp_path):
 def test_dockable_panels_focus_and_layout_presets(window,qt,tmp_path):
     w=window; open_ready(w,qt,project(tmp_path))
     assert set(w.docks)=={'dataset','inspector','view'}
-    assert all(d.isVisible() for d in w.docks.values())
-    w.toggle_focus(); qt.processEvents(); assert not any(d.isVisible() for d in w.docks.values())
-    w.toggle_focus(); qt.processEvents(); assert all(d.isVisible() for d in w.docks.values())
+    shown=lambda d:d.toggleViewAction().isChecked()  # true for a panel behind another tab too
+    assert all(shown(d) for d in w.docks.values()) and w.docks['inspector'].isVisible()
+    assert w.docks['view'] in w.dock_host.tabifiedDockWidgets(w.docks['inspector'])
+    w.toggle_focus(); qt.processEvents(); assert not any(shown(d) for d in w.docks.values())
+    w.toggle_focus(); qt.processEvents(); assert all(shown(d) for d in w.docks.values())
     w.apply_layout('right'); qt.processEvents()
     assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.RightDockWidgetArea
     assert w.docks['dataset'] in w.dock_host.tabifiedDockWidgets(w.docks['inspector'])
     w.docks['view'].hide(); w.apply_layout('default'); qt.processEvents()
-    assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.LeftDockWidgetArea and w.docks['view'].isVisible()
+    assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.LeftDockWidgetArea and shown(w.docks['view'])
     w.toggle_minimap(); assert w.minimap_check.isChecked()==w.canvas.show_minimap
     w.minimap_check.setChecked(not w.minimap_check.isChecked()); assert w.minimap_check.isChecked()==w.canvas.show_minimap
 

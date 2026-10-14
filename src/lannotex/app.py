@@ -213,7 +213,8 @@ class Main(QMainWindow):
             dock.setFeatures(QDockWidget.DockWidgetMovable|QDockWidget.DockWidgetFloatable|QDockWidget.DockWidgetClosable)
             self.dock_host.addDockWidget(area,dock); self.docks[key]=dock
         self.dock_host.resizeDocks([self.docks['dataset'],self.docks['inspector']],[260,290],Qt.Horizontal)
-        self.dock_host.resizeDocks([self.docks['inspector'],self.docks['view']],[620,220],Qt.Vertical)
+        # Image view shares a tab with the Inspector so the object list keeps full height on laptop screens.
+        self.dock_host.tabifyDockWidget(self.docks['inspector'],self.docks['view']); self.docks['inspector'].raise_()
         self.default_layout=self.dock_host.saveState()
         wrap=QWidget(); layout=QVBoxLayout(wrap); layout.setContentsMargins(8,8,8,8); layout.addWidget(self.dock_host)
         outer.addWidget(wrap,1); self.setCentralWidget(root)
@@ -812,7 +813,7 @@ class Main(QMainWindow):
         if name=='right':
             self.dock_host.addDockWidget(Qt.RightDockWidgetArea,self.docks['dataset'])
             self.dock_host.tabifyDockWidget(self.docks['inspector'],self.docks['dataset'])
-            self.docks['inspector'].raise_()
+        self.docks['inspector'].raise_()
 
     def adjustments_changed(self,*_):
         values={key:slider.value() for key,(slider,_,_) in self.adjust_sliders.items()}

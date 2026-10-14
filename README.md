@@ -89,6 +89,7 @@ Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.git
 | | |
 | --- | --- |
 | **Annotate** | Bounding boxes · polygons with vertex drag, insert, and delete · multi-label image classes · "no target" negatives · 100-step undo/redo · zoom under the pointer, pan, arrow-key nudging · focus mode · light and dark themes |
+| **View** | Sharp full-resolution zoom up to 6400% · next/previous images decoded ahead · minimap · pixel grid · brightness, contrast and gamma · thumbnails · dockable panels you can float onto a second monitor, with saved layouts · `Ctrl+K` command palette |
 | **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
 | **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
 | **Export** | Labelme JSON · ready-to-train YOLO (`images/`, `labels/`, `data.yaml`) · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
