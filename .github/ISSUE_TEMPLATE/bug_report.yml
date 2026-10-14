@@ -1,0 +1,58 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please don't attach private images. A small synthetic image or a
+        description of the shapes is usually enough to reproduce.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a Segmentation project
+        2. Import a PNG
+        3. Draw a polygon and press Ctrl+Enter
+        4. ...
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Error message or traceback
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Lannotex version
+      description: Output of `lannotex --version`
+      placeholder: lannotex 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - uv tool install
+        - pip / pipx
+        - Standalone release build
+        - From source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and Python version
+      placeholder: Windows 11, Python 3.12
+    validations:
+      required: true

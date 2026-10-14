@@ -1,0 +1,65 @@
+# Annotating
+
+## Tools
+
+| Tool | Key | How to use |
+| --- | --- | --- |
+| Select | ++v++ | Click a shape to select it; drag to move it or its vertices. |
+| Box | ++b++ | Drag from one corner to the opposite corner. |
+| Polygon | ++p++ | Click to add vertices; ++enter++ finishes, ++escape++ cancels. |
+
+The label selected in the **Labels & annotations** panel is applied to new shapes.
+
+### Editing polygons
+
+- **Move a vertex:** drag it.
+- **Insert a vertex:** double-click an edge.
+- **Remove a vertex:** select it and press ++shift+delete++.
+- **Redraw a shape:** select it and press ++r++. The shape is replaced in place,
+  keeping its ID and label.
+
+## Navigating the image
+
+| Action | Control |
+| --- | --- |
+| Zoom | Mouse wheel (zooms under the pointer) |
+| Pan | Hold ++space++ and drag |
+| Fit to window | ++f++ |
+| Nudge selection | Arrow keys (hold ++shift++ for a 10× step) |
+| Focus mode (hide panels) | ++ctrl+shift+f++ |
+
+## Keyboard reference
+
+| Action | Default |
+| --- | --- |
+| Save | ++ctrl+s++ |
+| Save & next | ++ctrl+enter++ |
+| Previous / next image | ++alt+left++ / ++alt+right++ |
+| Undo / redo | ++ctrl+z++ / ++ctrl+shift+z++ |
+| Duplicate selection | ++ctrl+d++ |
+| Delete selection | ++delete++ |
+| Open project | ++ctrl+o++ |
+| Import images | ++ctrl+i++ |
+
+Every shortcut can be remapped under **Help → Keyboard & preferences**. Shortcuts are
+ignored while you type in a text field.
+
+## What Lannotex validates
+
+Saves are rejected, with a message saying why, when an annotation would corrupt a
+dataset:
+
+- Boxes must have positive width and height inside the image.
+- Polygons need 3–1,000 vertices, a non-zero area, no duplicate vertices, and no
+  crossing edges.
+- Each class can be applied to an image only once.
+- An image marked **No target objects** cannot also contain annotations.
+
+## Coordinates
+
+Geometry is stored **normalized** (0–1) relative to the original image size. Large
+images are displayed as a preview capped at 2,560 px on the longest side, but stored
+coordinates and exports always use the original resolution. EXIF orientation is
+respected.
+
+Undo history keeps the last 100 changes for the image you're working on.
