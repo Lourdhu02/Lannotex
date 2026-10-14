@@ -1,0 +1,77 @@
+site_name: Lannotex
+site_description: Fast, offline-first image annotation for classifications, bounding boxes, and polygons.
+site_url: https://lourdhu02.github.io/Lannotex/
+repo_url: https://github.com/Lourdhu02/Lannotex
+repo_name: Lourdhu02/Lannotex
+edit_uri: edit/main/docs/
+copyright: MIT © Lannotex contributors
+
+# Material for MkDocs is in maintenance mode; keep to features Zensical also reads
+# (no blog/social/macros plugins) so switching generators stays a one-line CI change.
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.keys
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quick start: getting-started/quickstart.md
+  - User guide:
+      - Annotating: guide/annotating.md
+      - Projects & safety: guide/projects.md
+      - Import & export: guide/import-export.md
+      - Team projects: TEAM.md
+  - Coming from LabelMe: migrate-from-labelme.md
+  - Command line: cli.md
+  - Project:
+      - Roadmap: ROADMAP.md
+      - Performance: PERFORMANCE.md
+      - Verification: VERIFICATION.md
+      - Microsoft Store: MICROSOFT_STORE.md

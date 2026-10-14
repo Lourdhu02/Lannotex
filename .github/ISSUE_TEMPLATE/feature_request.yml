@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an improvement or a new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task or dataset, not just the feature. "I label 20k street images and..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help?
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you handle it today?
+      description: Another tool, a script, a manual step?
+  - type: checkboxes
+    id: offline
+    attributes:
+      label: Local-first
+      options:
+        - label: This works without an account or a cloud service
