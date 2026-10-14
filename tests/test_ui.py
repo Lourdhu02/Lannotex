@@ -184,6 +184,19 @@ def test_dockable_panels_focus_and_layout_presets(window,qt,tmp_path):
     w.minimap_check.setChecked(not w.minimap_check.isChecked()); assert w.minimap_check.isChecked()==w.canvas.show_minimap
 
 
+def test_command_palette_finds_and_runs_commands(window,qt,tmp_path):
+    from lannotex.palette import score
+    assert score('zoom','Zoom in','View')==0 and score('pix','Actual pixels (100%)','View')==1
+    assert score('layout default','Default layout','View › Panels')==3 and score('xyz','Zoom in','View') is None
+    w=window; open_ready(w,qt,large_project(tmp_path))
+    w.open_palette(); p=w.command_palette; qt.processEvents()
+    titles=[p.results.item(i).text().split('\n')[0] for i in range(p.results.count())]
+    assert 'Save & next' in titles and 'Default layout' in titles and not any(t.startswith('Command palette') for t in titles)
+    QTest.keyClicks(p.query,'actual'); assert p.results.currentItem().text().startswith('Actual pixels')
+    QTest.keyClick(p.query,Qt.Key_Return); qt.processEvents()
+    assert not p.isVisible() and w.zoom_label.text()=='100%'
+
+
 def test_detail_decode_respects_pixel_limit(tmp_path):
     from lannotex.workers import decode, decode_full
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)

@@ -23,6 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   another monitor, or closed. Your layout is remembered between sessions. Use
   **View → Panels** to bring a panel back or apply a preset (default, or all panels on the
   right). Focus mode hides every panel and restores your exact layout afterwards.
+- **Command palette** (`Ctrl+K`): type part of any menu command, for example "zoom",
+  "export" or "layout", and press Enter to run it.
 
 ## [0.1.1] — 2026-10-14
 

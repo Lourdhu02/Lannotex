@@ -53,6 +53,7 @@ Your layout is saved when you close Lannotex.
 
 | Action | Default |
 | --- | --- |
+| Command palette: search and run any command | ++ctrl+k++ |
 | Save | ++ctrl+s++ |
 | Save & next | ++ctrl+enter++ |
 | Previous / next image | ++alt+left++ / ++alt+right++ |

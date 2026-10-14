@@ -18,6 +18,7 @@ from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
 from .exporters import analyze, export_project, import_annotations
 from .models import ImageListModel
+from .palette import CommandPalette, menu_commands
 from .storage import ConflictError, Project, atomic_text
 from .theme import apply_theme
 from .workers import ImageLoader, Job, import_images
@@ -29,7 +30,7 @@ DEFAULT_KEYS = {'save':'Ctrl+S','save_next':'Ctrl+Return','previous':'Alt+Left',
                 'undo':'Ctrl+Z','redo':'Ctrl+Shift+Z','delete':'Del','cancel':'Esc','finish':'Return',
                 'fit':'F','select':'V','box':'B','polygon':'P','duplicate':'Ctrl+D','redraw':'R',
                 'vertex':'Shift+Del','focus':'Ctrl+Shift+F','open':'Ctrl+O','import':'Ctrl+I',
-                'zoom_in':'Ctrl+=','zoom_out':'Ctrl+-','actual':'Ctrl+1','minimap':'M','grid':'G'}
+                'zoom_in':'Ctrl+=','zoom_out':'Ctrl+-','actual':'Ctrl+1','minimap':'M','grid':'G','palette':'Ctrl+K'}
 
 
 def button(text, callback, primary=False):
@@ -217,6 +218,7 @@ class Main(QMainWindow):
                               ('vertex','Delete polygon vertex',self.canvas.delete_vertex),('cancel','Cancel drawing',self.canvas.cancel),
                               ('finish','Finish polygon',self.canvas.finish_polygon)]: add(edit,text,slot,key)
         view=self.menuBar().addMenu('View')
+        add(view,'Command palette…',self.open_palette,'palette'); view.addSeparator()
         add(view,'Fit image',self.canvas.fit,'fit'); add(view,'Actual pixels (100%)',self.canvas.actual_pixels,'actual')
         add(view,'Zoom in',lambda:self.canvas.zoom_by(1.25),'zoom_in'); add(view,'Zoom out',lambda:self.canvas.zoom_by(1/1.25),'zoom_out')
         add(view,'Show minimap',self.toggle_minimap,'minimap'); add(view,'Show pixel grid',self.toggle_grid,'grid')
@@ -772,6 +774,10 @@ class Main(QMainWindow):
             self.pre_focus=self.dock_host.saveState()
             for dock in self.docks.values(): dock.hide()
         else: self.dock_host.restoreState(self.pre_focus)
+
+    def open_palette(self):
+        commands=[c for c in menu_commands(self.menuBar()) if not c[0].startswith('Command palette')]
+        self.command_palette=CommandPalette(self,commands); self.command_palette.open()
 
     def apply_layout(self,name):
         self.focus_mode=False

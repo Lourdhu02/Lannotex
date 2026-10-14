@@ -43,6 +43,8 @@ def apply_theme(app, dark=True):
         QListView::item:selected, QListWidget::item:selected {{ background:{raised}; color:{text}; border-left:3px solid {accent}; }}
         QListView::item:hover {{ background:{raised}; }}
         QSplitter::handle {{ background:{bg}; width:8px; }}
+        QDialog#palette {{ background:{panel}; border:1px solid {border}; border-radius:12px; }}
+        QDialog#palette QListWidget::item {{ padding:8px 10px; }}
         QMainWindow#dockHost {{ background:{bg}; }}
         QMainWindow#dockHost::separator {{ background:{bg}; width:8px; height:8px; }}
         QMainWindow#dockHost::separator:hover {{ background:{border}; }}
