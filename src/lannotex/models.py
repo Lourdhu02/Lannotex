@@ -6,20 +6,32 @@ from PySide6.QtGui import QColor
 
 class ImageListModel(QAbstractListModel):
     """Virtual list: at most eight pages of 128 metadata records in memory."""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, thumbnails=None):
         super().__init__(parent)
         self.project = None
         self.search = ''
         self.status = 'all'
         self.total = 0
         self.pages = OrderedDict()
+        self.thumbnails = thumbnails
+        self.show_thumbnails = thumbnails is not None
+        self.waiting = {}
+        if thumbnails: thumbnails.ready.connect(self.thumbnail_ready)
+
+    def thumbnail_ready(self, key):
+        row = self.waiting.pop(key, None)
+        if row is not None and row < self.total: self.dataChanged.emit(self.index(row), self.index(row), [Qt.DecorationRole])
+
+    def set_show_thumbnails(self, on):
+        self.show_thumbnails = on and self.thumbnails is not None
+        if self.total: self.dataChanged.emit(self.index(0), self.index(self.total-1))
 
     def refresh(self, project=None, search=None, status=None):
         self.beginResetModel()
         if project is not None: self.project = project
         if search is not None: self.search = search
         if status is not None: self.status = status
-        self.pages.clear()
+        self.pages.clear(); self.waiting.clear()
         self.total = self.project.query(self.search,self.status,count=True) if self.project else 0
         self.endResetModel()
 
@@ -43,6 +55,12 @@ class ImageListModel(QAbstractListModel):
             state = {'new':'Unlabeled', 'done':'Labeled', 'empty':'No targets'}.get(row['status'],row['status'])
             return f"{Path(row['path']).name}\n{state}  ·  {row['width']} × {row['height']}"
         if role == Qt.ToolTipRole: return row['path']
+        if role == Qt.DecorationRole and self.show_thumbnails:
+            path = self.project.resolve(row['path'])
+            if not path.is_file(): return None
+            pixmap = self.thumbnails.get(path)
+            if pixmap is None: self.waiting[str(path)] = index.row()
+            return pixmap
         if role == Qt.ForegroundRole and row['status'] != 'new': return QColor('#888888')
         if role == Qt.UserRole: return dict(row)
 

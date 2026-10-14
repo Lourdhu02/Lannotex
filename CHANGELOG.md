@@ -23,6 +23,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   another monitor, or closed. Your layout is remembered between sessions. Use
   **View → Panels** to bring a panel back or apply a preset (default, or all panels on the
   right). Focus mode hides every panel and restores your exact layout afterwards.
+- **Thumbnails in the image list**, generated in the background with the rows you can see
+  first. They're cached on disk in your user cache folder, not the project, so reopening a
+  project is instant. The cache is capped at 512 MB. Toggle them under **View → Show
+  thumbnails in image list**.
 - **Command palette** (`Ctrl+K`): type part of any menu command, for example "zoom",
   "export" or "layout", and press Enter to run it.
 

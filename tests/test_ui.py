@@ -1,6 +1,8 @@
 """Real Qt interactions. All images and settings are isolated test fixtures."""
 import os
+import tempfile
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
+os.environ.setdefault('LANNOTEX_CACHE_DIR',tempfile.mkdtemp(prefix='lannotex-cache-'))
 from pathlib import Path
 import time
 import pytest
@@ -195,6 +197,31 @@ def test_command_palette_finds_and_runs_commands(window,qt,tmp_path):
     QTest.keyClicks(p.query,'actual'); assert p.results.currentItem().text().startswith('Actual pixels')
     QTest.keyClick(p.query,Qt.Key_Return); qt.processEvents()
     assert not p.isVisible() and w.zoom_label.text()=='100%'
+
+
+def test_thumbnails_load_in_background_and_cache_on_disk(window,qt,tmp_path):
+    from lannotex.thumbnails import thumbnail_file
+    w=window; open_ready(w,qt,project(tmp_path))
+    index=w.model.index(0)
+    w.model.data(index,Qt.DecorationRole)
+    wait_for(qt,lambda:w.model.data(index,Qt.DecorationRole) is not None)
+    icon=w.model.data(index,Qt.DecorationRole); assert not icon.isNull() and icon.availableSizes()[0].width()==128
+    path=w.project.resolve(w.model.record(0)['path'])
+    assert thumbnail_file(w.thumbnails.folder,path).is_file()
+    w.toggle_thumbnails(); assert w.model.data(index,Qt.DecorationRole) is None
+    w.toggle_thumbnails(); assert w.model.data(index,Qt.DecorationRole) is not None
+
+
+def test_thumbnail_cache_key_and_prune(tmp_path):
+    from lannotex.thumbnails import make_thumbnail, prune, thumbnail_file
+    image=tmp_path/'a.png'; Image.new('RGB',(400,200),'red').save(image)
+    folder=tmp_path/'cache'
+    thumb=make_thumbnail(folder,image); assert (thumb.width(),thumb.height())==(128,64)
+    first=thumbnail_file(folder,image); assert first.is_file()
+    assert make_thumbnail(folder,image).width()==128  # served from disk
+    os.utime(image,ns=(1_000_000_000,1_000_000_000)); assert thumbnail_file(folder,image)!=first
+    with pytest.raises(Exception): make_thumbnail(folder,tmp_path/'missing.png')
+    assert prune(folder,budget=0)==0 and not list(folder.glob('*/*.jpg'))
 
 
 def test_detail_decode_respects_pixel_limit(tmp_path):

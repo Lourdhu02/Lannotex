@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 import uuid
-from PySide6.QtCore import QEvent, QModelIndex, QSettings, Qt, QThreadPool, QTimer, Slot
+from PySide6.QtCore import QEvent, QModelIndex, QSettings, QSize, Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QAction, QColor, QKeySequence
 from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
     QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFileDialog, QSlider, QFrame, QGridLayout,
@@ -19,6 +19,7 @@ from .domain import Annotation, Document, validate_all
 from .exporters import analyze, export_project, import_annotations
 from .models import ImageListModel
 from .palette import CommandPalette, menu_commands
+from .thumbnails import Thumbnails
 from .storage import ConflictError, Project, atomic_text
 from .theme import apply_theme
 from .workers import ImageLoader, Job, import_images
@@ -61,6 +62,7 @@ class Main(QMainWindow):
         self.job = None; self.job_kind = ''; self.focus_mode = False
         self.pool = QThreadPool(self); self.pool.setMaxThreadCount(1)
         self.loader = ImageLoader(self)
+        self.thumbnails = Thumbnails(self); self.thumbnails.prune_later()
         self.loader.ready.connect(self.image_ready); self.loader.failed.connect(self.image_failed)
         self.loader.detail_ready.connect(self.detail_ready); self.loader.detail_failed.connect(self.detail_failed)
         self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.save)
@@ -108,7 +110,8 @@ class Main(QMainWindow):
         self.filter=QComboBox()
         for text,data in [('All images','all'),('Unlabeled','new'),('Labeled','done'),('No targets','empty')]: self.filter.addItem(text,data)
         self.filter.currentIndexChanged.connect(self.filter_images); left.addWidget(self.filter)
-        self.model=ImageListModel(self); self.images=QListView(); self.images.setModel(self.model)
+        self.model=ImageListModel(self,self.thumbnails); self.images=QListView(); self.images.setModel(self.model)
+        self.images.setIconSize(QSize(56,42)); self.model.set_show_thumbnails(self.settings.value('thumbnails',True,type=bool))
         self.images.setUniformItemSizes(True); self.images.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.images.setAccessibleName('Project images'); self.images.selectionModel().currentChanged.connect(self.select_index)
         left.addWidget(self.images,1)
@@ -222,7 +225,8 @@ class Main(QMainWindow):
         add(view,'Fit image',self.canvas.fit,'fit'); add(view,'Actual pixels (100%)',self.canvas.actual_pixels,'actual')
         add(view,'Zoom in',lambda:self.canvas.zoom_by(1.25),'zoom_in'); add(view,'Zoom out',lambda:self.canvas.zoom_by(1/1.25),'zoom_out')
         add(view,'Show minimap',self.toggle_minimap,'minimap'); add(view,'Show pixel grid',self.toggle_grid,'grid')
-        add(view,'Reset image adjustments',self.reset_adjustments); view.addSeparator()
+        add(view,'Reset image adjustments',self.reset_adjustments)
+        add(view,'Show thumbnails in image list',self.toggle_thumbnails); view.addSeparator()
         panels=view.addMenu('Panels')
         for dock in self.docks.values(): panels.addAction(dock.toggleViewAction())
         panels.addSeparator()
@@ -775,6 +779,9 @@ class Main(QMainWindow):
             for dock in self.docks.values(): dock.hide()
         else: self.dock_host.restoreState(self.pre_focus)
 
+    def toggle_thumbnails(self):
+        self.model.set_show_thumbnails(not self.model.show_thumbnails); self.settings.setValue('thumbnails',self.model.show_thumbnails)
+
     def open_palette(self):
         commands=[c for c in menu_commands(self.menuBar()) if not c[0].startswith('Command palette')]
         self.command_palette=CommandPalette(self,commands); self.command_palette.open()
@@ -993,7 +1000,7 @@ class Main(QMainWindow):
         if self.job:
             self.cancel_job(); self.loader.stop()
             self.notice('Finishing the active file operation. Close again when it has stopped.'); event.ignore(); return
-        self.loader.stop()
+        self.loader.stop(); self.thumbnails.pool.clear(); self.thumbnails.pool.waitForDone(3000)
         if not self.save():
             self.fail('Cannot close safely','Saving failed. Your edits remain in this window. Resolve disk space or permissions and try Save again.'); event.ignore(); return
         self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('layout',self.pre_focus if self.focus_mode else self.dock_host.saveState())
