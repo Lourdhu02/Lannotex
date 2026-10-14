@@ -87,15 +87,21 @@ class Canvas(QWidget):
             return [[x,y],[r,y],[r,b],[x,b]]
         return []
 
+    def sized_font(self, points, weight=QFont.Normal):
+        font = QFont(self.font())
+        font.setPointSize(points)
+        font.setWeight(weight)
+        return font
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.fillRect(self.rect(), self.palette().base())
         painter.setRenderHint(QPainter.Antialiasing)
         if self.image is None:
             painter.setPen(self.palette().text().color())
-            painter.setFont(QFont('Segoe UI', 20, QFont.DemiBold))
+            painter.setFont(self.sized_font(20, QFont.DemiBold))
             painter.drawText(self.rect().adjusted(24,-30,-24,-30), Qt.AlignCenter, self.empty_title)
-            painter.setFont(QFont('Segoe UI', 10))
+            painter.setFont(self.sized_font(10))
             painter.drawText(self.rect().adjusted(24,50,-24,50), Qt.AlignCenter | Qt.TextWordWrap, self.empty_detail)
             return
         r = self.image_rect()
@@ -115,7 +121,7 @@ class Canvas(QWidget):
             painter.drawPolygon(poly)
             anchor = poly.boundingRect().topLeft()
             text = f'{n}  {a.label}'
-            painter.setFont(QFont('Segoe UI', 9, QFont.DemiBold))
+            painter.setFont(self.sized_font(9, QFont.DemiBold))
             width = painter.fontMetrics().horizontalAdvance(text)+14
             badge = QRectF(anchor.x(), max(r.top(), anchor.y()-23), width, 22)
             painter.fillRect(badge, color)

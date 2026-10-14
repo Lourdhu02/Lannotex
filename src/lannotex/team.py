@@ -17,6 +17,7 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 import uuid
+from . import __version__
 from .domain import Annotation, validate_all
 from .storage import ConflictError, Project
 
@@ -54,7 +55,7 @@ class TeamServer(ThreadingHTTPServer):
 
 
 class TeamHandler(BaseHTTPRequestHandler):
-    server_version='Lannotex/0.0.2'
+    server_version=f'Lannotex/{__version__}'
     def log_message(self,*args): pass  # Never log access tokens or private image names.
 
     def reply(self,code,payload):

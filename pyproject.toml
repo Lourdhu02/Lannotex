@@ -24,19 +24,22 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Graphics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Image Processing",
 ]
-dependencies = ["PySide6==6.8.3", "Pillow==11.1.0"]
+# Ranges, not pins: exact pins break installs on newer Pythons. Release binaries pin
+# their full set in requirements-windows-build.txt.
+dependencies = ["PySide6-Essentials>=6.8.3,<7", "Pillow>=11.1"]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==8.3.4",
-    "pyinstaller==6.11.1",
-    "ruff==0.11.2",
-    "build==1.2.2.post1",
-    "twine==6.1.0",
+    "pytest>=8.3",
+    "pyinstaller>=6.11.1",
+    "ruff>=0.11.2",
+    "build>=1.2.2",
+    "twine>=6.1",
 ]
 
 [project.scripts]
@@ -47,7 +50,8 @@ lannotex-gui = "lannotex.app:main"
 Homepage = "https://github.com/Lourdhu02/Lannotex"
 Source = "https://github.com/Lourdhu02/Lannotex"
 Issues = "https://github.com/Lourdhu02/Lannotex/issues"
-Documentation = "https://github.com/Lourdhu02/Lannotex#readme"
+Documentation = "https://lourdhu02.github.io/Lannotex/"
+Changelog = "https://github.com/Lourdhu02/Lannotex/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

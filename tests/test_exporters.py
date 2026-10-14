@@ -2,6 +2,7 @@
 from pathlib import Path
 import threading
 
+from lannotex import __version__
 from lannotex.domain import Annotation
 from lannotex.exporters import coco_record, export_project, labelme_data, parse_labelme, yolo_line
 from lannotex.storage import Project
@@ -11,7 +12,7 @@ def test_labelme_round_trip_preserves_ids_and_geometry():
     anns = [Annotation("cat", "box", [.1, .2, .5, .6]),
             Annotation("dog", "polygon", [[0, 0], [1, 0], [1, 1]])]
     data = labelme_data("img.png", 100, 50, anns, negative=False)
-    assert data["lannotex"]["version"] == "0.0.2"
+    assert data["lannotex"]["version"] == __version__
     parsed, negative = parse_labelme(data)
     assert not negative
     assert [a.label for a in parsed] == ["cat", "dog"]
