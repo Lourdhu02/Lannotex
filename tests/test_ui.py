@@ -224,6 +224,19 @@ def test_thumbnail_cache_key_and_prune(tmp_path):
     assert prune(folder,budget=0)==0 and not list(folder.glob('*/*.jpg'))
 
 
+def test_icons_render_and_follow_the_theme(window,qt):
+    from lannotex.icons import PATHS, icon, logo
+    for name in PATHS: assert not icon(name,'#000000').isNull()
+    assert not logo().isNull()
+    w=window
+    def ink(button):
+        image=button.icon().pixmap(32,32).toImage()
+        return max((image.pixelColor(x,y) for x in range(32) for y in range(32)),key=lambda c:c.alpha()).lightness()
+    before=ink(w.undo_button); w.toggle_theme(); after=ink(w.undo_button); w.toggle_theme()
+    assert abs(before-after)>100
+    assert w.undo_button.text()=='' and w.undo_button.accessibleName()=='Undo'
+
+
 def test_detail_decode_respects_pixel_limit(tmp_path):
     from lannotex.workers import decode, decode_full
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)

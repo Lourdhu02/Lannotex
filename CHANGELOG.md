@@ -27,6 +27,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   first. They're cached on disk in your user cache folder, not the project, so reopening a
   project is instant. The cache is capped at 512 MB. Toggle them under **View → Show
   thumbnails in image list**.
+- **Icons:** a consistent line-icon set for the toolbar, navigation and Home screen,
+  redrawn for light and dark themes, plus the Lannotex logo as the window icon. Icon-only
+  buttons have tooltips and screen-reader names.
 - **Command palette** (`Ctrl+K`): type part of any menu command, for example "zoom",
   "export" or "layout", and press Enter to run it.
 

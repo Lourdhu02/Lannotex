@@ -20,6 +20,7 @@ from .exporters import analyze, export_project, import_annotations
 from .models import ImageListModel
 from .palette import CommandPalette, menu_commands
 from .thumbnails import Thumbnails
+from .icons import icon, logo
 from .storage import ConflictError, Project, atomic_text
 from .theme import apply_theme
 from .workers import ImageLoader, Job, import_images
@@ -82,19 +83,33 @@ class Main(QMainWindow):
         if geometry: self.restoreGeometry(geometry)
         layout = self.settings.value('layout')
         if layout: self.dock_host.restoreState(layout)
-        self.set_save_state('No project'); self.refresh_controls()
+        self.set_save_state('No project'); self.refresh_controls(); self.apply_icons()
+
+    def apply_icons(self):
+        palette=QApplication.palette(); color=palette.text().color().name(); on_accent=palette.highlightedText().color().name()
+        for widget,name in [(self.home_button,'home'),(self.new_button,'plus'),(self.open_button,'folder-open'),(self.team_button,'users'),
+                            (self.theme_button,'theme'),(self.analysis_button,'chart'),(self.import_button,'folder-plus'),(self.files_button,'file-plus'),
+                            (self.undo_button,'undo'),(self.redo_button,'redo'),(self.fit_button,'fit'),(self.prev_button,'prev'),
+                            (self.next_image_button,'next'),(self.save_button,'save')]:
+            widget.setIcon(icon(name,color)); widget.setIconSize(QSize(18,18))
+        self.export_button.setIcon(icon('export',on_accent)); self.export_button.setIconSize(QSize(18,18))
+        for mode,tool in self.tool_buttons.items():
+            tool.setIcon(icon(mode,color)); tool.setIconSize(QSize(18,18)); tool.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.home.set_icon_color(color)
+        self.setWindowIcon(logo())
 
     def _build_ui(self):
         root = QWidget(); outer = QVBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
         header=QFrame(); header.setObjectName('header'); bar=QHBoxLayout(header); bar.setContentsMargins(20,14,20,14)
-        bar.addWidget(button('‹ Home',self.go_home))
+        self.home_button=button('Home',self.go_home); bar.addWidget(self.home_button)
         brand=QVBoxLayout(); brand.setSpacing(1); brand.addWidget(label('Lannotex','brand')); self.pipeline_title=label('ANNOTATION WORKSPACE'); brand.addWidget(self.pipeline_title)
         bar.addLayout(brand); bar.addSpacing(28)
         self.project_title=label('No project open'); bar.addWidget(self.project_title,1)
-        bar.addWidget(button('New project',self.new_project)); bar.addWidget(button('Open',self.open_project))
+        self.new_button=button('New project',self.new_project); bar.addWidget(self.new_button)
+        self.open_button=button('Open',self.open_project); bar.addWidget(self.open_button)
         self.team_button=button('Team',self.team_dialog); bar.addWidget(self.team_button)
         self.sync_button=button('Sync',self.sync_team); bar.addWidget(self.sync_button); self.sync_button.hide()
-        bar.addWidget(button('◐',self.toggle_theme))
+        self.theme_button=button('',self.toggle_theme); self.theme_button.setToolTip('Light / dark theme'); self.theme_button.setAccessibleName('Toggle theme'); bar.addWidget(self.theme_button)
         self.analysis_button=button('Analysis',self.show_analysis); bar.addWidget(self.analysis_button)
         self.export_button=button('Export',self.export_dialog,True); bar.addWidget(self.export_button)
         outer.addWidget(header)
@@ -103,8 +118,8 @@ class Main(QMainWindow):
         self.dock_host.setDockOptions(QMainWindow.AnimatedDocks|QMainWindow.AllowTabbedDocks|QMainWindow.AllowNestedDocks)
         self.left=QFrame(); self.left.setObjectName('panel'); left=QVBoxLayout(self.left); left.setContentsMargins(12,10,12,10)
         self.dataset_count=label('0 images'); left.addWidget(self.dataset_count)
-        row=QHBoxLayout(); self.import_button=button('+ Folder',self.import_folder); row.addWidget(self.import_button)
-        self.files_button=button('+ Files',self.import_files); row.addWidget(self.files_button); left.addLayout(row)
+        row=QHBoxLayout(); self.import_button=button('Folder',self.import_folder); self.import_button.setToolTip('Import a folder of images (Ctrl+I)'); row.addWidget(self.import_button)
+        self.files_button=button('Files',self.import_files); self.files_button.setToolTip('Import image files'); row.addWidget(self.files_button); left.addLayout(row)
         self.search=QLineEdit(); self.search.setPlaceholderText('Search image names…'); self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda:self.filter_timer.start(180)); left.addWidget(self.search)
         self.filter=QComboBox()
@@ -125,9 +140,10 @@ class Main(QMainWindow):
             tool=QToolButton(); tool.setText(f'{text}  {key}'); tool.setCheckable(True); tool.setToolTip(f'{text} tool ({key})')
             tool.clicked.connect(lambda checked=False,m=mode:self.set_tool(m)); tools.addWidget(tool); self.tool_buttons[mode]=tool
         self.tool_buttons['select'].setChecked(True)
-        tools.addStretch(); self.undo_button=button('↶',self.undo); self.undo_button.setToolTip('Undo (Ctrl+Z)'); tools.addWidget(self.undo_button)
-        self.redo_button=button('↷',self.redo); self.redo_button.setToolTip('Redo (Ctrl+Shift+Z)'); tools.addWidget(self.redo_button)
-        self.zoom_label=label('100%'); tools.addWidget(self.zoom_label); tools.addWidget(button('Fit',lambda:self.canvas.fit()))
+        tools.addStretch(); self.undo_button=button('',self.undo); self.undo_button.setToolTip('Undo (Ctrl+Z)'); self.undo_button.setAccessibleName('Undo'); tools.addWidget(self.undo_button)
+        self.redo_button=button('',self.redo); self.redo_button.setToolTip('Redo (Ctrl+Shift+Z)'); self.redo_button.setAccessibleName('Redo'); tools.addWidget(self.redo_button)
+        self.zoom_label=label('100%'); tools.addWidget(self.zoom_label)
+        self.fit_button=button('Fit',lambda:self.canvas.fit()); self.fit_button.setToolTip('Fit image (F)'); tools.addWidget(self.fit_button)
         middle.addLayout(tools)
         self.canvas=Canvas(); self.canvas.edited.connect(self.commit); self.canvas.selected.connect(self.selection_changed)
         self.canvas.message.connect(self.notice); self.canvas.zoomed.connect(lambda n:self.zoom_label.setText(f'{n}%'))
@@ -136,8 +152,11 @@ class Main(QMainWindow):
         middle.addWidget(self.canvas,1)
         self.canvas_hint=label('B  Draw box   ·   P  Draw polygon   ·   Space + drag  Pan   ·   F  Fit')
         self.canvas_hint.setWordWrap(True); middle.addWidget(self.canvas_hint)
-        footer=QHBoxLayout(); footer.addWidget(button('←',lambda:self.navigate(-1)))
-        self.position=label('— / —'); footer.addWidget(self.position); footer.addWidget(button('→',lambda:self.navigate(1)))
+        footer=QHBoxLayout(); self.prev_button=button('',lambda:self.navigate(-1)); self.prev_button.setToolTip('Previous image (Alt+Left)')
+        self.prev_button.setAccessibleName('Previous image'); footer.addWidget(self.prev_button)
+        self.position=label('— / —'); footer.addWidget(self.position)
+        self.next_image_button=button('',lambda:self.navigate(1)); self.next_image_button.setToolTip('Next image (Alt+Right)')
+        self.next_image_button.setAccessibleName('Next image'); footer.addWidget(self.next_image_button)
         footer.addStretch(); self.save_button=button('Save',self.save); footer.addWidget(self.save_button)
         self.next_button=button('Save && next→',self.save_next,True); footer.addWidget(self.next_button); middle.addLayout(footer)
         self.dock_host.setCentralWidget(center)
@@ -974,7 +993,7 @@ class Main(QMainWindow):
         layout.addWidget(button('Close',dialog.accept)); dialog.exec()
 
     def toggle_theme(self):
-        self.dark=not self.dark; self.settings.setValue('dark',self.dark); apply_theme(QApplication.instance(),self.dark)
+        self.dark=not self.dark; self.settings.setValue('dark',self.dark); apply_theme(QApplication.instance(),self.dark); self.apply_icons()
 
     def preferences(self):
         dialog=QDialog(self); dialog.setWindowTitle('Keyboard & preferences'); dialog.resize(530,700); layout=QVBoxLayout(dialog)
@@ -1012,7 +1031,7 @@ class Main(QMainWindow):
 
 def main():
     app=QApplication(sys.argv); app.setOrganizationName('Lannotex'); app.setApplicationName('Lannotex Desktop')
-    app.setStyle('Fusion')
+    app.setStyle('Fusion'); app.setWindowIcon(logo())
     window=Main(); window.show()
     # A bounded test must actually enter the Qt event loop and report completion.
     if '--smoke-test' in sys.argv:

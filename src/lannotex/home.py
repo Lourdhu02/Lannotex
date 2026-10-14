@@ -1,6 +1,7 @@
 """Home, recent projects and intentional pipeline setup, independent of editor logic."""
 from pathlib import Path
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
+from .icons import icon, logo
 from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QTextEdit, QVBoxLayout, QWidget)
@@ -40,13 +41,17 @@ class Home(QWidget):
         shell=QHBoxLayout(self); shell.setContentsMargins(0,0,0,0); shell.setSpacing(0)
         rail=QWidget(); rail.setObjectName('rail'); rail.setFixedWidth(220); nav=QVBoxLayout(rail)
         nav.setContentsMargins(16,28,16,20); nav.setSpacing(8)
-        nav.addWidget(text('◈  Lannotex','brand')); nav.addSpacing(36)
-        for title,signal in [('＋  New project',lambda:self.create_requested.emit('classification')),
-                             ('▤  Open project',self.open_requested.emit),('↗  Join team',self.join_requested.emit)]:
-            b=QPushButton(title); b.setObjectName('nav'); b.clicked.connect(signal); nav.addWidget(b)
+        brand=QHBoxLayout(); brand.setSpacing(10); self.logo=QLabel(); self.logo.setPixmap(logo().pixmap(QSize(30,30)))
+        brand.addWidget(self.logo); brand.addWidget(text('Lannotex','brand')); brand.addStretch(); nav.addLayout(brand); nav.addSpacing(36)
+        self.nav_buttons={}
+        def nav_button(key,title,signal):
+            b=QPushButton(title); b.setObjectName('nav'); b.setIconSize(QSize(18,18)); b.clicked.connect(signal); self.nav_buttons[key]=b; return b
+        for key,title,signal in [('plus','New project',lambda:self.create_requested.emit('classification')),
+                                 ('folder-open','Open project',self.open_requested.emit),('users','Join team',self.join_requested.emit)]:
+            nav.addWidget(nav_button(key,title,signal))
         nav.addStretch(); nav.addWidget(text('YOUR WORKSPACE\nSolo or together. Your data.'))
-        b=QPushButton('◐  Light / dark'); b.setObjectName('nav'); b.clicked.connect(self.theme_requested); nav.addWidget(b)
-        b=QPushButton('Settings && shortcuts'); b.setObjectName('nav'); b.clicked.connect(self.preferences_requested); nav.addWidget(b)
+        nav.addWidget(nav_button('theme','Light / dark',self.theme_requested))
+        nav.addWidget(nav_button('settings','Settings && shortcuts',self.preferences_requested))
         shell.addWidget(rail)
         scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
         page=QWidget(); layout=QVBoxLayout(page); layout.setContentsMargins(52,38,52,28); layout.setSpacing(18)
@@ -70,6 +75,9 @@ class Home(QWidget):
         layout.addStretch(1)
         layout.addWidget(text('Solo projects work offline. Team projects connect only to the host you choose.'))
         scroll.setWidget(page); shell.addWidget(scroll,1)
+
+    def set_icon_color(self, color):
+        for key, b in self.nav_buttons.items(): b.setIcon(icon(key, color))
 
     def refresh(self, recent):
         self.recents.clear()
