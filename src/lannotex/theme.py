@@ -12,7 +12,7 @@ def apply_theme(app, dark=True):
                        (QPalette.ToolTipBase,panel),(QPalette.ToolTipText,text)]: palette.setColor(role,QColor(color))
     app.setPalette(palette)
     app.setStyleSheet(f'''
-        QWidget {{ font-family: "Segoe UI"; font-size: 10pt; color: {text}; }}
+        QWidget {{ font-size: 10pt; color: {text}; }}
         QMainWindow, QDialog, QWidget#home, QWidget#workspace {{ background: {bg}; }}
         QWidget#rail {{ background:{panel}; border-right:1px solid {border}; }}
         QFrame#card {{ background:{panel}; border:1px solid {border}; border-radius:12px; }}

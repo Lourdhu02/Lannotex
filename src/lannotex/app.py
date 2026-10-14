@@ -7,12 +7,13 @@ from pathlib import Path
 import sys
 import uuid
 from PySide6.QtCore import QEvent, QModelIndex, QSettings, Qt, QThreadPool, QTimer, Slot
-from PySide6.QtGui import QAction, QColor, QFont, QKeySequence
+from PySide6.QtGui import QAction, QColor, QKeySequence
 from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
     QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
     QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel, QLineEdit, QListView, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
     QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
+from . import __version__
 from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
 from .exporters import analyze, export_project, import_annotations
@@ -44,9 +45,10 @@ def label(text, style='muted'):
 class Main(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Lannotex Desktop · 0.0.2')
+        self.setWindowTitle(f'Lannotex Desktop · {__version__}')
         self.resize(1440,940); self.setMinimumSize(900,620)
-        self.settings = QSettings('Lannotex','Desktop')
+        # Explicit INI format: the (org, app) constructor ignores setDefaultFormat/setPath, so tests couldn't isolate it.
+        self.settings = QSettings(QSettings.IniFormat, QSettings.UserScope, 'Lannotex', 'Desktop')
         self.bindings = dict(DEFAULT_KEYS)
         stored = self.settings.value('keys', {})
         if isinstance(stored, dict): self.bindings.update(stored)
@@ -128,7 +130,7 @@ class Main(QMainWindow):
         footer=QHBoxLayout(); footer.addWidget(button('←',lambda:self.navigate(-1)))
         self.position=label('— / —'); footer.addWidget(self.position); footer.addWidget(button('→',lambda:self.navigate(1)))
         footer.addStretch(); self.save_button=button('Save',self.save); footer.addWidget(self.save_button)
-        self.next_button=button('Save & next  →',self.save_next,True); footer.addWidget(self.next_button); middle.addLayout(footer)
+        self.next_button=button('Save && next→',self.save_next,True); footer.addWidget(self.next_button); middle.addLayout(footer)
         self.splitter.addWidget(center)
         self.right=QScrollArea(); self.right.setWidgetResizable(True); self.right.setMinimumWidth(245)
         inspector=QWidget(); form=QVBoxLayout(inspector); form.setContentsMargins(14,10,14,14); form.setSpacing(9)
@@ -163,7 +165,7 @@ class Main(QMainWindow):
         self.opacity.setValue(self.settings.value('opacity',15,type=int)); self.canvas.opacity=self.opacity.value()/100
         self.opacity.valueChanged.connect(self.opacity_changed); form.addWidget(self.opacity)
         self.polygon_hint=label('Polygon: drag a vertex to edit. Double-click an edge to insert. Shift+Delete removes the selected vertex.'); self.polygon_hint.setWordWrap(True); form.addWidget(self.polygon_hint)
-        form.addStretch(); form.addWidget(button('Keyboard & preferences',self.preferences))
+        form.addStretch(); form.addWidget(button('Keyboard && preferences',self.preferences))
         self.right.setWidget(inspector); self.splitter.addWidget(self.right); self.splitter.setSizes([260,850,280])
         wrap=QWidget(); layout=QVBoxLayout(wrap); layout.setContentsMargins(12,12,12,12); layout.addWidget(self.splitter)
         outer.addWidget(wrap,1); self.setCentralWidget(root)
@@ -180,7 +182,7 @@ class Main(QMainWindow):
         add(file,'New project…',self.new_project); add(file,'Open project…',self.open_project,'open')
         add(file,'Import image folder…',self.import_folder,'import'); add(file,'Import image files…',self.import_files)
         add(file,'Import annotations…',self.import_annotation_dialog); file.addSeparator()
-        add(file,'Save',self.save,'save'); add(file,'Save & next',self.save_next,'save_next')
+        add(file,'Save',self.save,'save'); add(file,'Save && next',self.save_next,'save_next')
         add(file,'Export…',self.export_dialog); add(file,'Backup project…',self.backup_dialog)
         add(file,'Restore backup…',self.restore_dialog); add(file,'Relink current image…',self.relink_dialog)
         add(file,'Project tasks…',self.task_settings)
@@ -194,8 +196,8 @@ class Main(QMainWindow):
         add(view,'Toggle light / dark',self.toggle_theme); add(view,'Analysis',self.show_analysis)
         add(view,'Previous image',lambda:self.navigate(-1),'previous'); add(view,'Next image',lambda:self.navigate(1),'next')
         for mode in ('select','box','polygon'): add(view,mode.title()+' tool',lambda checked=False,m=mode:self.set_tool(m),mode)
-        helpmenu=self.menuBar().addMenu('Help'); add(helpmenu,'Keyboard & preferences',self.preferences)
-        add(helpmenu,'About Lannotex',lambda:QMessageBox.information(self,'Lannotex Desktop','Lannotex Desktop 0.0.2\nLocal image annotation. No login, telemetry or uploads.\n\nDisplay previews are capped at 2560 px. Geometry uses original dimensions.'))
+        helpmenu=self.menuBar().addMenu('Help'); add(helpmenu,'Keyboard && preferences',self.preferences)
+        add(helpmenu,'About Lannotex',lambda:QMessageBox.information(self,'Lannotex Desktop',f'Lannotex Desktop {__version__}\nLocal image annotation. No login, telemetry or uploads.\n\nDisplay previews are capped at 2560 px. Geometry uses original dimensions.'))
         self.update_action_labels()
 
     def update_action_labels(self):
@@ -223,7 +225,7 @@ class Main(QMainWindow):
 
     def set_save_state(self, text):
         self.save_badge.setText(text)
-        self.setWindowTitle(f"{'● ' if self.dirty else ''}Lannotex Desktop · {self.project.root.name if self.project else '0.0.2'}")
+        self.setWindowTitle(f"{'● ' if self.dirty else ''}Lannotex Desktop · {self.project.root.name if self.project else __version__}")
 
     def refresh_controls(self):
         opened=self.project is not None; ready=opened and self.current is not None and not self.loading and self.canvas.image is not None
@@ -426,7 +428,8 @@ class Main(QMainWindow):
             item=QListWidgetItem(name); item.setFlags(item.flags()|Qt.ItemIsUserCheckable); item.setCheckState(Qt.Unchecked)
             item.setForeground(QColor(color)); self.classes.addItem(item)
         if active in self.canvas.colors: self.label_combo.setCurrentText(active)
-        self.classes.setFixedHeight(min(150,max(70,self.classes.count()*34)))
+        rows=sum(self.classes.sizeHintForRow(i) for i in range(self.classes.count()))+2*self.classes.frameWidth()
+        self.classes.setFixedHeight(min(150,max(70,rows)))
         self.canvas.label=self.label_combo.currentText(); self.guard=False; self.sync_inspector()
 
     def add_label(self):
@@ -909,13 +912,13 @@ class Main(QMainWindow):
 
 def main():
     app=QApplication(sys.argv); app.setOrganizationName('Lannotex'); app.setApplicationName('Lannotex Desktop')
-    app.setStyle('Fusion'); app.setFont(QFont('Segoe UI',10))
+    app.setStyle('Fusion')
     window=Main(); window.show()
     # A bounded test must actually enter the Qt event loop and report completion.
     if '--smoke-test' in sys.argv:
         def done():
             target=os.environ.get('LANNOTEX_SMOKE_RESULT')
-            if target: atomic_text(target,json.dumps({'version':'0.0.2','window_visible':window.isVisible(),'qt_event_loop':True}))
+            if target: atomic_text(target,json.dumps({'version':__version__,'window_visible':window.isVisible(),'qt_event_loop':True}))
             window.close()
         QTimer.singleShot(300,done)
     raise SystemExit(app.exec())

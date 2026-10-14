@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import uuid
+from . import __version__
 from .domain import Annotation, polygon_area, validate_all
 from .storage import Project, atomic_text
 
@@ -21,7 +22,7 @@ def labelme_data(image_path, width, height, annotations, negative=False):
                        'flags':{},'group_id':None,'lannotex_id':a.id})
     return {'version':'5.5.0','imageData':None,'imagePath':image_path,'imageWidth':width,'imageHeight':height,
             'flags':{a.label:True for a in annotations if a.kind=='classification'}, 'shapes':shapes,
-            'lannotex':{'version':'0.0.2','no_targets':negative,'editable':True}}
+            'lannotex':{'version':__version__,'no_targets':negative,'editable':True}}
 
 
 def labelme(path, image_path, width, height, annotations):
@@ -137,7 +138,7 @@ def export_project(root, destination, format_name, cancel, progress):
                             stream.write(line.strip()); first=False
                     stream.write(sep)
                 stream.write(json.dumps([{'id':i+1,'name':s} for i,s in enumerate(labels)])+'}')
-        atomic_text(output/'manifest.json',json.dumps({'version':'0.0.1','format_version':1,'editable_local_export':True,'image_policy':'Referenced, not copied','summary':summary},indent=2))
+        atomic_text(output/'manifest.json',json.dumps({'version':__version__,'format_version':1,'editable_local_export':True,'image_policy':'Referenced, not copied','summary':summary},indent=2))
         if not summary.get('cancelled'):
             final = destination/('Lannotex-export-'+uuid.uuid4().hex[:8]); output.rename(final); output=final
         summary['path'] = str(output)

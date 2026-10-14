@@ -46,7 +46,7 @@ class Home(QWidget):
             b=QPushButton(title); b.setObjectName('nav'); b.clicked.connect(signal); nav.addWidget(b)
         nav.addStretch(); nav.addWidget(text('YOUR WORKSPACE\nSolo or together. Your data.'))
         b=QPushButton('◐  Light / dark'); b.setObjectName('nav'); b.clicked.connect(self.theme_requested); nav.addWidget(b)
-        b=QPushButton('Settings & shortcuts'); b.setObjectName('nav'); b.clicked.connect(self.preferences_requested); nav.addWidget(b)
+        b=QPushButton('Settings && shortcuts'); b.setObjectName('nav'); b.clicked.connect(self.preferences_requested); nav.addWidget(b)
         shell.addWidget(rail)
         scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
         page=QWidget(); layout=QVBoxLayout(page); layout.setContentsMargins(52,38,52,28); layout.setSpacing(18)
