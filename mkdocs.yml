@@ -10,6 +10,8 @@ copyright: MIT © Lannotex contributors
 # (no blog/social/macros plugins) so switching generators stays a one-line CI change.
 theme:
   name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
   icon:
     repo: fontawesome/brands/github
   palette:

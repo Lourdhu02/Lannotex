@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Lannotex">
+  <rect x="1" y="1" width="126" height="126" rx="27" fill="#141414" stroke="#ffffff" stroke-opacity=".14" stroke-width="2"/>
+  <path d="M28 50V28h22M78 28h22v22M100 78v22H78M50 100H28V78" fill="none" stroke="#fafafa" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M47 80 61 45l25 14-7 26z" fill="#37b8a5" fill-opacity=".3" stroke="#37b8a5" stroke-width="4" stroke-linejoin="round"/>
+  <g fill="#fafafa" stroke="#37b8a5" stroke-width="3">
+    <circle cx="47" cy="80" r="5"/>
+    <circle cx="61" cy="45" r="5"/>
+    <circle cx="86" cy="59" r="5"/>
+    <circle cx="79" cy="85" r="5"/>
+  </g>
+</svg>
