@@ -32,7 +32,9 @@ classifiers = [
 ]
 # Ranges, not pins: exact pins break installs on newer Pythons. Release binaries pin
 # their full set in requirements-windows-build.txt.
-dependencies = ["PySide6-Essentials>=6.8.3,<7", "Pillow>=11.1"]
+# PySide6 6.12.0 over-releases None/True on every QThreadPool job and worker-thread signal,
+# which aborts Python 3.11 on Linux at exit ("bool_dealloc"); 6.8.3-6.11.0 are unaffected.
+dependencies = ["PySide6-Essentials>=6.8.3,<7,!=6.12.0", "Pillow>=11.1"]
 
 [project.optional-dependencies]
 dev = [
