@@ -78,6 +78,18 @@ for the test and lint commands.
 lannotex --version
 ```
 
+## Troubleshooting
+
+**Windows: `OSError: [WinError 206] The filename or extension is too long`.**
+Qt contains deeply nested files, and pip can't write paths longer than 260 characters
+unless Windows long paths are enabled. Do one of the following:
+
+- Install with `uv tool install lannotex`. uv isn't affected by the limit.
+- Create the virtual environment in a shorter folder, such as `C:\venvs\lannotex`.
+- Enable long paths once from an administrator PowerShell, then reinstall:
+  `New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force`
+
+**Linux: the window doesn't open.**
 Linux desktops need the usual Qt runtime libraries. If the window fails to open with an
 `xcb` plugin error, install your distribution's `libxcb-cursor0` (Debian/Ubuntu) or
 `xcb-util-cursor` (Fedora/Arch) package.
