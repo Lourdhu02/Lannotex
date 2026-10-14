@@ -30,6 +30,25 @@ python -m build                  # build sdist + wheel
 3. **Focused** — one logical change per PR, with a clear title and description.
 4. **Documented** — user-visible changes are noted in `CHANGELOG.md`.
 
+## Project layout
+
+```
+src/lannotex/
+├── domain.py       # normalized annotation model, geometry validation, undo/redo document
+├── storage.py      # SQLite schema + migrations, drafts, transactional writes, backup/restore
+├── exporters.py    # Labelme / YOLO / COCO / CSV / JSONL export + import + analysis
+├── canvas.py       # native Qt canvas: draw, select, edit, pan, zoom
+├── app.py          # main window, menus, dialogs, background job orchestration
+├── home.py         # home / recents and pipeline project creation
+├── team.py         # authenticated host, client outbox and conflict resolution
+├── models.py       # virtualized image list model (8-page cache)
+├── workers.py      # cancellable jobs + bounded serial image decoder (96 MB cache)
+├── theme.py        # dark / light theme
+└── cli.py          # headless command-line interface
+```
+
+Documentation lives in `docs/` and builds with `pip install -r docs/requirements.txt && mkdocs serve`.
+
 ## Code conventions
 
 - Python 3.11+, `from __future__ import annotations` at the top of modules.

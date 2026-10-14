@@ -14,6 +14,8 @@ telemetry, and no network traffic unless you deliberately host or join a team.
 [Install Lannotex](getting-started/installation.md){ .md-button .md-button--primary }
 [Coming from LabelMe?](migrate-from-labelme.md){ .md-button }
 
+![Drawing two boxes and a polygon on a cat photo in Lannotex, then saving and moving to the next image](assets/demo.gif)
+
 ## Why Lannotex
 
 <div class="grid cards" markdown>

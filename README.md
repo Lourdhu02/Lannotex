@@ -1,157 +1,162 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/Lourdhu02/Lannotex/main/docs/assets/logo.svg" width="88" alt="Lannotex logo">
+
 # Lannotex
 
-> Fast, offline-first image annotation for **classifications**, **bounding boxes**, and **polygons** — right on your own machine.
+**Fast, offline-first image annotation for bounding boxes, polygons, and image classes.**<br>
+Free and MIT-licensed. LabelMe-compatible. Your images never leave your machine.
 
-![PyPI - Version](https://img.shields.io/pypi/v/lannotex)
-![Python](https://img.shields.io/pypi/pyversions/lannotex)
-![License](https://img.shields.io/github/license/Lourdhu02/Lannotex)
-![CI](https://img.shields.io/github/actions/workflow/status/Lourdhu02/Lannotex/ci.yml?label=CI)
-![Platforms](https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-supported-brightgreen)
-[![stars](https://img.shields.io/github/stars/Lourdhu02/Lannotex?style=social)](https://github.com/Lourdhu02/Lannotex)
+[![CI](https://img.shields.io/github/actions/workflow/status/Lourdhu02/Lannotex/ci.yml?branch=main&label=tests)](https://github.com/Lourdhu02/Lannotex/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/github/actions/workflow/status/Lourdhu02/Lannotex/docs.yml?branch=main&label=docs)](https://lourdhu02.github.io/Lannotex/)
+[![Python](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-3776ab)](https://lourdhu02.github.io/Lannotex/getting-started/installation/)
+[![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-supported-555)](https://github.com/Lourdhu02/Lannotex/releases)
+[![License: MIT](https://img.shields.io/github/license/Lourdhu02/Lannotex?color=37b8a5)](https://github.com/Lourdhu02/Lannotex/blob/main/LICENSE)
 
-Lannotex is a local-first desktop annotation tool built with PySide6/Qt. Projects are
-plain **SQLite databases** in a folder of your choice; source images are **never altered**.
-Solo projects stay on disk. Optional team projects explicitly transfer images and
-annotations between reviewer desktops and a host you choose. Export to Labelme, YOLO,
-COCO, CSV, or Lannotex's native JSONL — all editable locally.
+[**Documentation**](https://lourdhu02.github.io/Lannotex/) ·
+[Quick start](https://lourdhu02.github.io/Lannotex/getting-started/quickstart/) ·
+[Coming from LabelMe](https://lourdhu02.github.io/Lannotex/migrate-from-labelme/) ·
+[Releases](https://github.com/Lourdhu02/Lannotex/releases)
 
-*No telemetry or automatic cloud connection. Solo mode needs no account.*
+<img src="https://raw.githubusercontent.com/Lourdhu02/Lannotex/main/docs/assets/demo.gif" width="860" alt="Drawing two boxes and a polygon on a cat photo in Lannotex, then saving and moving to the next image">
 
-📖 **[Documentation](https://lourdhu02.github.io/Lannotex/)** · [Quick start](https://lourdhu02.github.io/Lannotex/getting-started/quickstart/) · [Coming from LabelMe](https://lourdhu02.github.io/Lannotex/migrate-from-labelme/)
+</div>
 
-## Features
+## Why Lannotex?
 
-- 🖼️ **Boxes, polygons, and multi-label classification** with a native-painted canvas
-- **Home screen** with recent projects, Continue, and four pipeline presets
-- **White and black themes** with persistent preferences and focus mode
-- **Separate workspaces**: classification-only projects show classes, detection shows boxes, segmentation shows polygons
-- **Team mode**: optional host service, reviewer tokens, background synchronization, revision conflicts, revocation, and saved-version audit history
-- 💾 **Offline SQLite projects** with versioned migrations, WAL, and transactional saves
-- 🛟 **Recovery drafts** — every edit is written to a recovery draft; autosave debounces 700 ms
-- 🎛️ **Normalized geometry** (0–1) so coordinates survive resolution changes and re-linking
-- ⏩ **Headless CLI** — `lannotex export` and `lannotex analyze` for CI and automation
-- 📦 **Export formats**: Labelme JSON, YOLO boxes, COCO JSON, Classification CSV, Native JSONL
-- 🔄 **Undo / redo** (100 steps), zoom-under-pointer, pan, and arrow-key nudging
-- 🚀 **Virtualized image list** — only 8 pages × 128 records in memory, no matter the dataset size
-- 🔒 **Solo works offline** — network connections occur only when you host or join a team
+- **Everything you need is free.** YOLO, COCO, Labelme and CSV export, standalone desktop builds, and team review are all free and open source. No license keys, no Pro tier.
+- **Built for real datasets.** A project is one SQLite file instead of thousands of JSON files. The image list is virtualized, so its memory use stays flat; it was [benchmarked](https://lourdhu02.github.io/Lannotex/PERFORMANCE/) at 100,000 records. Your source images are never moved or modified.
+- **You can't lose work.** Every edit is written to a recovery draft, saves are transactional, and broken geometry (self-intersecting polygons, zero-size boxes) is rejected before it reaches your dataset.
+- **Private by default.** No account, no telemetry, no cloud. The app makes network requests only if you choose to host or join a team on your own network.
 
 ## Install
 
-Requires **Python 3.11+**. Lannotex runs on Windows, macOS, and Linux.
+```bash
+uv tool install lannotex   # recommended, isolated install
+lannotex
+```
 
-### From PyPI
+<details>
+<summary>pip, pipx, standalone builds, and source</summary>
 
 ```bash
-# pip
+pipx install lannotex
+# or, inside a virtual environment
 python -m pip install lannotex
-lannotex
-
-# uv
-uv tool install lannotex
-lannotex
 ```
 
-### Standalone binaries
+**Standalone builds** for Windows, macOS, and Linux are attached to every
+[release](https://github.com/Lourdhu02/Lannotex/releases). They bundle Python and Qt, so
+nothing else is needed.
 
-Grab the prebuilt executable for your OS from the
-[Releases](https://github.com/Lourdhu02/Lannotex/releases) page. Binaries run without a
-separate Python install. The app stores project files only in the project directory — it
-never writes project data into its installation directory.
-
-### From source
+**From source:**
 
 ```bash
-git clone https://github.com/Lourdhu02/Lannotex.git
-cd Lannotex
-python -m venv .venv
-source .venv/bin/activate        # Windows: .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e .[dev]
+git clone https://github.com/Lourdhu02/Lannotex.git && cd Lannotex
+uv venv && uv pip install -e ".[dev]"
 lannotex
 ```
 
-## Quick start
+</details>
 
-1. **New project** — name it, choose a location, pipeline, and Solo or Team mode. Or **Continue** from Home.
-2. **Import folder / files** — add JPEG, PNG, or WebP images. Nothing is moved or copied.
-3. **Add classes or object labels**. Classification uses checkboxes; detection and segmentation expose only their drawing tools.
-4. **Save** (`Ctrl+S`) or **Save & next** (`Ctrl+Enter`).
+Lannotex supports Python 3.11–3.14 on Windows, macOS, and Linux. See the
+[installation guide](https://lourdhu02.github.io/Lannotex/getting-started/installation/)
+for details.
 
-> Projects keep image references relative to the project folder in this release. If you move
-> an image, choose **Project → Relink current image** to point at its new location.
+## Your first dataset in 60 seconds
+
+1. **Create a project** and pick a pipeline: *Classification*, *Object detection*, *Segmentation*, or *Combined*. Each one shows only the tools it needs.
+2. **Import a folder** (`Ctrl+I`). JPEG, PNG and WebP files are checked and referenced in place, not copied.
+3. **Add labels**, then draw: `B` for boxes, `P` for polygons (`Enter` finishes), `V` to select and edit.
+4. **Save & next** with `Ctrl+Enter`. Autosave and recovery drafts run in the background anyway.
+5. **Export** to the format your training code expects.
+
+Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.github.io/Lannotex/guide/annotating/) for the full list.
+
+<table>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Lourdhu02/Lannotex/main/docs/assets/workspace-light.png" alt="Lannotex workspace in light theme with a polygon and a box on a coffee cup"></td>
+    <td><img src="https://raw.githubusercontent.com/Lourdhu02/Lannotex/main/docs/assets/workspace-dark.png" alt="Lannotex workspace in dark theme with boxes on an astronaut photo"></td>
+  </tr>
+  <tr>
+    <td align="center">Light theme · polygon vertex editing</td>
+    <td align="center">Dark theme · object detection</td>
+  </tr>
+</table>
+
+## Features
+
+| | |
+| --- | --- |
+| **Annotate** | Bounding boxes · polygons with vertex drag, insert, and delete · multi-label image classes · "no target" negatives · 100-step undo/redo · zoom under the pointer, pan, arrow-key nudging · focus mode · light and dark themes |
+| **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
+| **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
+| **Export** | Labelme JSON · YOLO · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
+| **Automate** | `lannotex export` and `lannotex analyze` run headless in CI, with no display needed |
+| **Collaborate** | Optional LAN host with per-reviewer tokens, background sync, revision conflicts you resolve explicitly, revocation, and an audit history |
+
+## Lannotex vs. LabelMe
+
+LabelMe is a great tool and Lannotex reads and writes its JSON format, so you can switch
+without converting anything.
+
+| | Lannotex | LabelMe |
+| --- | :---: | :---: |
+| License | MIT | GPL-3.0 |
+| Standalone desktop app | Free | Paid license |
+| YOLO export | ✅ Free | Pro tier |
+| COCO export | ✅ | ✅ |
+| One database per dataset | ✅ | One JSON per image |
+| Crash recovery and transactional saves | ✅ | Optional autosave |
+| Team review with conflict handling | ✅ | — |
+| Headless export and validation CLI | ✅ | Example scripts |
+| AI-assisted annotation (SAM) | Not yet | ✅ |
+| Circles, lines, points, rotated boxes | Not yet | ✅ |
+
+Based on LabelMe's published features and pricing as of October 2026. The
+[full comparison and migration guide](https://lourdhu02.github.io/Lannotex/migrate-from-labelme/)
+covers which LabelMe shapes import today.
 
 ## Command line
 
 ```bash
-lannotex                      # launch the desktop app
-lannotex gui --smoke-test     # bounded Qt event-loop test (for CI)
-lannotex new ./dataset        # create an empty project
-lannotex analyze ./dataset    # JSON validation report
-lannotex export ./dataset ./out --format "YOLO boxes"
-lannotex invite ./dataset "Reviewer name"  # prints a private reviewer token once
-lannotex host ./dataset --bind 0.0.0.0 --port 8765
+lannotex new ./dataset                                  # create a project
+lannotex analyze ./dataset                              # JSON health report: counts, problems, drafts
+lannotex export ./dataset ./out --format "COCO JSON"    # Labelme JSON | YOLO boxes | COCO JSON | Classification CSV | Native JSONL
+lannotex invite ./dataset "Alice"                       # print a one-time reviewer token
+lannotex host ./dataset --bind 0.0.0.0 --port 8765      # share a project on your LAN (TLS via --cert/--key)
 ```
 
-`export` accepts: `Labelme JSON`, `YOLO boxes`, `COCO JSON`, `Classification CSV`,
-`Native JSONL`.
-
-## Keyboard & controls
-
-| Keys | Action |
-| --- | --- |
-| `B` / `P` / `V` | Box / polygon / select tool |
-| `Enter` | Finish polygon |
-| `Escape` | Cancel drawing |
-| `Delete` | Delete selection · `Shift+Del` deletes a polygon vertex |
-| `R` | Redraw the selected annotation in place |
-| `F` | Fit image |
-| `Space + drag` | Pan · wheel zooms under the pointer |
-| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
-| `Ctrl+S` / `Ctrl+Enter` | Save / Save & next |
-| Arrow keys | Nudge selection (`Shift` = 10× step) |
-
-All shortcuts are remappable under **Help → Keyboard & preferences**.
+`analyze` writes clean JSON to stdout, so it can gate a training pipeline. See the
+[CLI reference](https://lourdhu02.github.io/Lannotex/cli/).
 
 ## Privacy
 
-Solo mode references local images and makes no network requests. Team mode connects
-only to the host address you enter. Images are downloaded on demand, and annotations
-sync in the background. Reviewer tokens are retained only in memory on the client;
-the host stores token hashes. There is no telemetry, external AI, or automatic upload
-to a company service. See [the team guide](docs/TEAM.md) for trusted-LAN/TLS setup,
-conflict resolution, and the limits of the current collaboration model.
-
-## Architecture
-
-```
-src/lannotex/
-├── domain.py       # normalized annotation model, geometry validation, undo/redo document
-├── storage.py      # SQLite schema + migrations, drafts, transactional writes, backup/restore
-├── exporters.py    # Labelme / YOLO / COCO / CSV / JSONL export + import + analysis
-├── canvas.py       # native Qt canvas: draw, select, edit, pan, zoom
-├── app.py          # main window, menus, dialogs, background job orchestration
-├── home.py         # home / recents and pipeline project creation
-├── team.py         # authenticated host, client outbox and conflict resolution
-├── models.py       # virtualized image list model (8-page cache)
-├── workers.py      # cancellable jobs + bounded serial image decoder (96 MB cache)
-├── theme.py        # dark / light theme
-└── cli.py          # headless command-line interface
-```
+Solo projects make no network requests. Team mode connects only to the host address you
+enter, reviewer tokens are kept in memory on clients, and the host stores only token
+hashes. There is no telemetry, no external AI service, and no automatic upload. Read the
+[team guide](https://lourdhu02.github.io/Lannotex/TEAM/) for LAN and TLS setup.
 
 ## Roadmap
 
-Current verification and measured limits are in [docs/VERIFICATION.md](docs/VERIFICATION.md)
-and [docs/PERFORMANCE.md](docs/PERFORMANCE.md). Team hosting is intended for a trusted
-LAN/VPN (or CLI-configured TLS). Multi-stage independent review/adjudication, hosted
-internet deployment, and clean-VM certification are not claimed by this release.
+Next up: a ready-to-train YOLO layout (`images/`, `labels/`, `data.yaml`), more LabelMe
+shape types, VOC and YOLO-seg export, and number-key label selection. See the
+[roadmap](https://lourdhu02.github.io/Lannotex/ROADMAP/) and the
+[measured performance](https://lourdhu02.github.io/Lannotex/PERFORMANCE/).
 
 ## Contributing
 
-Contributions are welcome! Start with [CONTRIBUTING.md](CONTRIBUTING.md) and our
-[Code of Conduct](CODE_OF_CONDUCT.md). Please report bugs through
-[GitHub Issues](https://github.com/Lourdhu02/Lannotex/issues).
+Bug reports, ideas, and pull requests are welcome. Start with
+[CONTRIBUTING.md](https://github.com/Lourdhu02/Lannotex/blob/main/CONTRIBUTING.md), and
+please follow the [Code of Conduct](https://github.com/Lourdhu02/Lannotex/blob/main/CODE_OF_CONDUCT.md).
+Report security issues privately, as described in
+[SECURITY.md](https://github.com/Lourdhu02/Lannotex/blob/main/SECURITY.md).
+
+If Lannotex saves you time, a ⭐ helps other people find it.
 
 ## License
 
-[MIT](LICENSE) © Lannotex contributors. Third-party licenses are listed in
-[LICENSES/THIRD_PARTY_NOTICES.md](LICENSES/THIRD_PARTY_NOTICES.md).
+[MIT](https://github.com/Lourdhu02/Lannotex/blob/main/LICENSE). Third-party licenses are
+listed in [THIRD_PARTY_NOTICES.md](https://github.com/Lourdhu02/Lannotex/blob/main/LICENSES/THIRD_PARTY_NOTICES.md).
+Demo images are public-domain and CC0 samples from
+[scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html).
