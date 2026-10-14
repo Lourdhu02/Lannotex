@@ -57,7 +57,7 @@ telemetry, and no network traffic unless you deliberately host or join a team.
 | --- | --- |
 | **Annotation types** | Whole-image classes (multi-label), bounding boxes, polygons |
 | **Pipelines** | Classification, detection, segmentation, or combined |
-| **Platforms** | Windows, macOS, Linux; Python 3.11–3.13 or standalone binaries |
+| **Platforms** | Windows, macOS, Linux; Python 3.11–3.14 or standalone binaries |
 | **Exports** | Labelme JSON, YOLO boxes, COCO JSON, classification CSV, native JSONL |
 | **Imports** | Images (JPEG, PNG, WebP), Labelme JSON, native JSONL |
 | **License** | MIT |

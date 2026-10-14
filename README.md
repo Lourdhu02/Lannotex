@@ -17,6 +17,8 @@ COCO, CSV, or Lannotex's native JSONL — all editable locally.
 
 *No telemetry or automatic cloud connection. Solo mode needs no account.*
 
+📖 **[Documentation](https://lourdhu02.github.io/Lannotex/)** · [Quick start](https://lourdhu02.github.io/Lannotex/getting-started/quickstart/) · [Coming from LabelMe](https://lourdhu02.github.io/Lannotex/migrate-from-labelme/)
+
 ## Features
 
 - 🖼️ **Boxes, polygons, and multi-label classification** with a native-painted canvas

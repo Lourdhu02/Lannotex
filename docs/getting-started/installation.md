@@ -23,7 +23,7 @@ Upgrade later with `uv tool upgrade lannotex`.
 
 ## With pip
 
-Use Python **3.11 – 3.13**. Installing into a virtual environment keeps Lannotex's Qt
+Use Python **3.11 – 3.14**. Installing into a virtual environment keeps Lannotex's Qt
 libraries separate from your other projects:
 
 === "Windows"
