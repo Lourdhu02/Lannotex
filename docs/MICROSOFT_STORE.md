@@ -1,3 +1,15 @@
 # Microsoft Store preparation
 
-Build the PyInstaller directory artifact on a clean Windows machine, run Windows App Certification Kit, create an MSIX wrapper with a manifest declaring no network capability by default, and submit only after license notices and clean-VM testing are complete. Do not package project data inside the installation directory.
+Lannotex targets the Microsoft Store as a v0.3 packaging milestone. The gate for a
+store submission is:
+
+1. Build the PyInstaller directory artifact (`dist\Lannotex\Lannotex.exe`) on a clean
+   Windows machine using `scripts\build_windows.ps1`.
+2. Run the Windows App Certification Kit and fix any failures.
+3. Create an MSIX wrapper with a manifest declaring **no network capability** by default.
+4. Confirm `LICENSES\THIRD_PARTY_NOTICES.md` is included and matches the bundled
+   dependency licenses.
+5. Smoke-test the packaged app on a clean Windows VM.
+
+Do **not** package project data inside the installation directory — projects live in
+user-chosen folders and must survive app updates.

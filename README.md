@@ -1,42 +1,147 @@
-# LabelReview Desktop 0.0.1
+# Lannotex
 
-Fast, offline-first annotation for classifications, boxes, and polygons. Projects are local SQLite databases; source images are never altered or uploaded.
+> Fast, offline-first image annotation for **classifications**, **bounding boxes**, and **polygons** — right on your own machine.
 
-## Install and run
+![PyPI - Version](https://img.shields.io/pypi/v/lannotex)
+![Python](https://img.shields.io/pypi/pyversions/lannotex)
+![License](https://img.shields.io/github/license/Lannotex/Lannotex)
+![CI](https://img.shields.io/github/actions/workflow/status/Lannotex/Lannotex/ci.yml?label=CI)
+![Platforms](https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-supported-brightgreen)
+[![stars](https://img.shields.io/github/stars/Lannotex/Lannotex?style=social)](https://github.com/Lannotex/Lannotex)
 
-Requires Python 3.11+.
+Lannotex is a local-first desktop annotation tool built with PySide6/Qt. Projects are
+plain **SQLite databases** in a folder of your choice; source images are **never altered,
+never uploaded, and never leave your disk**. When you're done, export to Labelme, YOLO,
+COCO, CSV, or Lannotex's native JSONL — all editable locally.
 
-```powershell
+*No login. No telemetry. No cloud. Your data stays yours.*
+
+## Screenshot
+
+![Lannotex main window](docs/screenshot.png)
+<!-- Replace with a real screenshot before release — this placeholder keeps the README layout final. -->
+
+## Features
+
+- 🖼️ **Boxes, polygons, and multi-label classification** with a native-painted canvas
+- 💾 **Offline SQLite projects** with versioned migrations, WAL, and transactional saves
+- 🛟 **Recovery drafts** — every edit is written to a recovery draft; autosave debounces 700 ms
+- 🎛️ **Normalized geometry** (0–1) so coordinates survive resolution changes and re-linking
+- ⏩ **Headless CLI** — `lannotex export` and `lannotex analyze` for CI and automation
+- 📦 **Export formats**: Labelme JSON, YOLO boxes, COCO JSON, Classification CSV, Native JSONL
+- 🔄 **Undo / redo** (100 steps), zoom-under-pointer, pan, and arrow-key nudging
+- 🚀 **Virtualized image list** — only 8 pages × 128 records in memory, no matter the dataset size
+- 🔒 **Local-only by design** — no login, telemetry, or network access in the app
+
+## Install
+
+Requires **Python 3.11+**. Lannotex runs on Windows, macOS, and Linux.
+
+### From PyPI
+
+```bash
+# pip
+python -m pip install lannotex
+lannotex
+
+# uv
+uv tool install lannotex
+lannotex
+```
+
+### Standalone binaries
+
+Grab the prebuilt executable for your OS from the
+[Releases](https://github.com/Lannotex/Lannotex/releases) page. Binaries run without a
+separate Python install. The app stores project files only in the project directory — it
+never writes project data into its installation directory.
+
+### From source
+
+```bash
+git clone https://github.com/Lannotex/Lannotex.git
+cd Lannotex
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate        # Windows: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install .[dev]
-labelreview
+python -m pip install -e .[dev]
+lannotex
 ```
 
-The first action is **Open project**, which selects (or creates) a project directory. Then choose **Import folder**, add labels, and annotate. Projects retain absolute image references in this initial release; if a file is moved, select the original image folder again and re-import to restore it.
+## Quick start
 
-## Controls
+1. **New project** (or **Open project**) — pick any folder; Lannotex creates `project.sqlite3` there.
+2. **Import folder / files** — add JPEG, PNG, or WebP images. Nothing is moved or copied.
+3. **Add labels**, choose a tool, and annotate.
+4. **Save** (`Ctrl+S`) or **Save & next** (`Ctrl+Enter`).
 
-`B` box, `P` polygon, `V` select, `Enter` finish polygon, `Escape` cancel drawing, `Delete` delete selection, `F` fit, `Ctrl+S` save, and `Ctrl+Enter` save and next. The canvas zooms under the pointer with the wheel. Autosave has a 700 ms debounce.
+> Projects keep image references relative to the project folder in this release. If you move
+> an image, choose **Project → Relink current image** to point at its new location.
 
-## Build a portable Windows app
+## Command line
 
-```powershell
-.\scripts\build_windows.ps1
+```bash
+lannotex                      # launch the desktop app
+lannotex gui --smoke-test     # bounded Qt event-loop test (for CI)
+lannotex new ./dataset        # create an empty project
+lannotex analyze ./dataset    # JSON validation report
+lannotex export ./dataset ./out --format "YOLO boxes"
 ```
 
-This creates `dist\LabelReview\LabelReview.exe`, which runs without a separate Python install. Validate this directory on a clean Windows VM before distribution. The app stores project files only in the project directory; it does not write project data into the installation directory.
+`export` accepts: `Labelme JSON`, `YOLO boxes`, `COCO JSON`, `Classification CSV`,
+`Native JSONL`.
+
+## Keyboard & controls
+
+| Keys | Action |
+| --- | --- |
+| `B` / `P` / `V` | Box / polygon / select tool |
+| `Enter` | Finish polygon |
+| `Escape` | Cancel drawing |
+| `Delete` | Delete selection · `Shift+Del` deletes a polygon vertex |
+| `R` | Redraw the selected annotation in place |
+| `F` | Fit image |
+| `Space + drag` | Pan · wheel zooms under the pointer |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
+| `Ctrl+S` / `Ctrl+Enter` | Save / Save & next |
+| Arrow keys | Nudge selection (`Shift` = 10× step) |
+
+All shortcuts are remappable under **Help → Keyboard & preferences**.
+
+## Privacy
+
+Lannotex is offline-first. The desktop app makes **no network requests**. Images are
+referenced from disk (never copied or re-encoded), annotations live in a local SQLite
+database, and exports are written to a folder you choose.
 
 ## Architecture
 
-- `domain.py`: normalized annotation model and geometry validation
-- `storage.py`: SQLite schema migration and transactional writes
-- `exporters.py`: Labelme, YOLO coordinate, and COCO record conversion primitives
-- `app.py`: Qt UI and graphics canvas
+```
+src/lannotex/
+├── domain.py       # normalized annotation model, geometry validation, undo/redo document
+├── storage.py      # SQLite schema + migrations, drafts, transactional writes, backup/restore
+├── exporters.py    # Labelme / YOLO / COCO / CSV / JSONL export + import + analysis
+├── canvas.py       # native Qt canvas: draw, select, edit, pan, zoom
+├── app.py          # main window, menus, dialogs, background job orchestration
+├── models.py       # virtualized image list model (8-page cache)
+├── workers.py      # cancellable jobs + bounded serial image decoder (96 MB cache)
+├── theme.py        # dark / light theme
+└── cli.py          # headless command-line interface
+```
 
-## Scope and known limitations
+## Roadmap
 
-v0.0.1 is a functional local MVP, not a complete Labelme replacement. It includes classification data model support, boxes and new polygon drawing, explicit/debounced persistence, and reopening editable boxes. It does **not yet** provide a production-grade background importer/thumbnail cache, polygon vertex editing/reload rendering, undo/redo, configurable bindings/themes/layout persistence, project archive/restore/relink UI, full export wizard/analysis page, or finished Microsoft Store packaging. These remain the priority work before claiming support for 10 GB datasets.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the v0.1 path: polygon vertex reload rendering,
+background importer with a thumbnail cache, project archive/relink UI, an export wizard,
+configurable themes/layouts, and 10 GB dataset support.
 
-Future paid desktop features must be optional: local projects and exports remain accessible independently of any future entitlement or cloud service.
+## Contributing
+
+Contributions are welcome! Start with [CONTRIBUTING.md](CONTRIBUTING.md) and our
+[Code of Conduct](CODE_OF_CONDUCT.md). Please report bugs through
+[GitHub Issues](https://github.com/Lannotex/Lannotex/issues).
+
+## License
+
+[MIT](LICENSE) © Lannotex contributors. Third-party licenses are listed in
+[LICENSES/THIRD_PARTY_NOTICES.md](LICENSES/THIRD_PARTY_NOTICES.md).
