@@ -16,6 +16,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   1200% zoom upwards.
 - **Zoom controls:** actual pixels (`Ctrl+1`), zoom in/out (`Ctrl+=` / `Ctrl+-`) up to
   6400%. The zoom readout now shows true pixel scale, so 100% means actual pixels.
+- **Image adjustments:** brightness, contrast and gamma in a new **Image view** panel. They
+  change the display only, never your files, and are applied just to the visible region, so
+  they stay fast on large images.
+- **Dockable panels:** Dataset, Inspector and Image view can be moved, tabbed, floated onto
+  another monitor, or closed. Your layout is remembered between sessions. Use
+  **View → Panels** to bring a panel back or apply a preset (default, or all panels on the
+  right). Focus mode hides every panel and restores your exact layout afterwards.
 
 ## [0.1.1] — 2026-10-14
 

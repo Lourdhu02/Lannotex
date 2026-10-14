@@ -31,6 +31,24 @@ The label selected in the **Labels & annotations** panel is applied to new shape
 | Nudge selection | Arrow keys (hold ++shift++ for a 10× step) |
 | Focus mode (hide panels) | ++ctrl+shift+f++ |
 
+## Image adjustments
+
+The **Image view** panel has brightness, contrast and gamma sliders for dark, washed-out or
+low-contrast images. They change only what you see, never your files or the exported data.
+**Reset adjustments**, or **View → Reset image adjustments**, returns to the original.
+
+## Arranging the workspace
+
+The **Dataset**, **Inspector** and **Image view** panels are dockable:
+
+- Drag a panel's title bar to move it to another side, or onto another panel to tab them.
+- Use the float button to detach a panel, for example onto a second monitor.
+- Close panels you don't need. **View → Panels** lists them all so you can bring them back.
+- **View → Panels → Default layout** and **All panels on the right** are one-click presets.
+- **Focus mode** (++ctrl+shift+f++) hides every panel. Press it again to restore your layout.
+
+Your layout is saved when you close Lannotex.
+
 ## Keyboard reference
 
 | Action | Default |

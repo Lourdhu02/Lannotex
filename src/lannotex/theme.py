@@ -43,6 +43,13 @@ def apply_theme(app, dark=True):
         QListView::item:selected, QListWidget::item:selected {{ background:{raised}; color:{text}; border-left:3px solid {accent}; }}
         QListView::item:hover {{ background:{raised}; }}
         QSplitter::handle {{ background:{bg}; width:8px; }}
+        QMainWindow#dockHost {{ background:{bg}; }}
+        QMainWindow#dockHost::separator {{ background:{bg}; width:8px; height:8px; }}
+        QMainWindow#dockHost::separator:hover {{ background:{border}; }}
+        QDockWidget::title {{ background:{panel}; color:{muted}; padding:7px 12px; border:1px solid {border}; border-bottom:0;
+                              border-top-left-radius:8px; border-top-right-radius:8px; }}
+        QTabBar::tab {{ background:{panel}; color:{muted}; border:1px solid {border}; padding:6px 12px; }}
+        QTabBar::tab:selected {{ color:{text}; border-bottom:2px solid {accent}; }}
         QMenuBar, QMenu {{ background:{panel}; }}
         QMenuBar::item:selected, QMenu::item:selected {{ background:{raised}; }}
         QMenu::item {{ padding:7px 26px; }}

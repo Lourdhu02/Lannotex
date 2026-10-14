@@ -157,6 +157,33 @@ def test_full_resolution_detail_prefetch_minimap_and_grid(window,qt,tmp_path):
     w.toggle_minimap()
 
 
+def test_image_adjustments_change_only_the_display(window,qt,tmp_path):
+    w=window; open_ready(w,qt,project(tmp_path)); c=w.canvas
+    def center_gray(): c.repaint(); return c.grab().toImage().pixelColor(c.width()//2,c.height()//2).red()
+    original=center_gray()
+    w.adjust_sliders['brightness'][0].setValue(-50)
+    assert w.adjust_sliders['brightness'][1].text()=='-50'
+    darker=center_gray(); assert darker<original-40
+    w.adjust_sliders['gamma'][0].setValue(200); assert center_gray()>darker
+    w.reset_adjustments(); assert c.lut is None and center_gray()==original
+    path=w.project.resolve(w.current['path']); assert Image.open(path).getpixel((5,5))==(224,224,224)
+
+
+def test_dockable_panels_focus_and_layout_presets(window,qt,tmp_path):
+    w=window; open_ready(w,qt,project(tmp_path))
+    assert set(w.docks)=={'dataset','inspector','view'}
+    assert all(d.isVisible() for d in w.docks.values())
+    w.toggle_focus(); qt.processEvents(); assert not any(d.isVisible() for d in w.docks.values())
+    w.toggle_focus(); qt.processEvents(); assert all(d.isVisible() for d in w.docks.values())
+    w.apply_layout('right'); qt.processEvents()
+    assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.RightDockWidgetArea
+    assert w.docks['dataset'] in w.dock_host.tabifiedDockWidgets(w.docks['inspector'])
+    w.docks['view'].hide(); w.apply_layout('default'); qt.processEvents()
+    assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.LeftDockWidgetArea and w.docks['view'].isVisible()
+    w.toggle_minimap(); assert w.minimap_check.isChecked()==w.canvas.show_minimap
+    w.minimap_check.setChecked(not w.minimap_check.isChecked()); assert w.minimap_check.isChecked()==w.canvas.show_minimap
+
+
 def test_detail_decode_respects_pixel_limit(tmp_path):
     from lannotex.workers import decode, decode_full
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)

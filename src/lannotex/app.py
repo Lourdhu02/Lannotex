@@ -9,10 +9,10 @@ import uuid
 from PySide6.QtCore import QEvent, QModelIndex, QSettings, Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QAction, QColor, QKeySequence
 from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
-    QDialog, QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
+    QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFileDialog, QSlider, QFrame, QGridLayout,
     QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel, QLineEdit, QListView, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
-    QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
+    QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 from . import __version__
 from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
@@ -77,8 +77,8 @@ class Main(QMainWindow):
         QApplication.instance().installEventFilter(self)
         geometry = self.settings.value('geometry')
         if geometry: self.restoreGeometry(geometry)
-        sizes = self.settings.value('splitter')
-        if sizes: self.splitter.restoreState(sizes)
+        layout = self.settings.value('layout')
+        if layout: self.dock_host.restoreState(layout)
         self.set_save_state('No project'); self.refresh_controls()
 
     def _build_ui(self):
@@ -95,9 +95,10 @@ class Main(QMainWindow):
         self.analysis_button=button('Analysis',self.show_analysis); bar.addWidget(self.analysis_button)
         self.export_button=button('Export',self.export_dialog,True); bar.addWidget(self.export_button)
         outer.addWidget(header)
-        self.splitter=QSplitter(); self.splitter.setChildrenCollapsible(False)
+        # Inner main window so panels dock, tab, float and persist within the workspace page only.
+        self.dock_host=QMainWindow(); self.dock_host.setWindowFlags(Qt.Widget); self.dock_host.setObjectName('dockHost')
+        self.dock_host.setDockOptions(QMainWindow.AnimatedDocks|QMainWindow.AllowTabbedDocks|QMainWindow.AllowNestedDocks)
         self.left=QFrame(); self.left.setObjectName('panel'); left=QVBoxLayout(self.left); left.setContentsMargins(12,10,12,10)
-        left.addWidget(label('DATASET','section'))
         self.dataset_count=label('0 images'); left.addWidget(self.dataset_count)
         row=QHBoxLayout(); self.import_button=button('+ Folder',self.import_folder); row.addWidget(self.import_button)
         self.files_button=button('+ Files',self.import_files); row.addWidget(self.files_button); left.addLayout(row)
@@ -111,7 +112,7 @@ class Main(QMainWindow):
         self.images.setAccessibleName('Project images'); self.images.selectionModel().currentChanged.connect(self.select_index)
         left.addWidget(self.images,1)
         self.left_hint=label('Images stay on your disk.\nNothing is uploaded.'); left.addWidget(self.left_hint)
-        self.left.setMinimumWidth(220); self.splitter.addWidget(self.left)
+        self.left.setMinimumWidth(220)
         center=QWidget(); middle=QVBoxLayout(center); middle.setContentsMargins(8,0,8,0); middle.setSpacing(8)
         top=QHBoxLayout(); self.image_title=label('Annotation studio','section'); top.addWidget(self.image_title,1)
         self.save_badge=label('No project','save'); top.addWidget(self.save_badge); middle.addLayout(top)
@@ -135,7 +136,7 @@ class Main(QMainWindow):
         self.position=label('— / —'); footer.addWidget(self.position); footer.addWidget(button('→',lambda:self.navigate(1)))
         footer.addStretch(); self.save_button=button('Save',self.save); footer.addWidget(self.save_button)
         self.next_button=button('Save && next→',self.save_next,True); footer.addWidget(self.next_button); middle.addLayout(footer)
-        self.splitter.addWidget(center)
+        self.dock_host.setCentralWidget(center)
         self.right=QScrollArea(); self.right.setWidgetResizable(True); self.right.setMinimumWidth(245)
         inspector=QWidget(); form=QVBoxLayout(inspector); form.setContentsMargins(14,10,14,14); form.setSpacing(9)
         self.inspector_heading=label('LABELS & ANNOTATIONS','section'); form.addWidget(self.inspector_heading)
@@ -164,14 +165,34 @@ class Main(QMainWindow):
         self.redraw_button=button('Redraw',lambda:self.canvas.redraw()); editrow.addWidget(self.redraw_button); form.addLayout(editrow)
         self.delete_button=button('Delete selected',self.delete_selected); self.delete_button.setObjectName('danger'); form.addWidget(self.delete_button)
         form.addWidget(button('Clear image annotations',self.clear_annotations))
-        from PySide6.QtWidgets import QSlider
         self.opacity_heading=label('OVERLAY OPACITY','section'); form.addWidget(self.opacity_heading); self.opacity=QSlider(Qt.Horizontal); self.opacity.setRange(0,70)
         self.opacity.setValue(self.settings.value('opacity',15,type=int)); self.canvas.opacity=self.opacity.value()/100
         self.opacity.valueChanged.connect(self.opacity_changed); form.addWidget(self.opacity)
         self.polygon_hint=label('Polygon: drag a vertex to edit. Double-click an edge to insert. Shift+Delete removes the selected vertex.'); self.polygon_hint.setWordWrap(True); form.addWidget(self.polygon_hint)
         form.addStretch(); form.addWidget(button('Keyboard && preferences',self.preferences))
-        self.right.setWidget(inspector); self.splitter.addWidget(self.right); self.splitter.setSizes([260,850,280])
-        wrap=QWidget(); layout=QVBoxLayout(wrap); layout.setContentsMargins(12,12,12,12); layout.addWidget(self.splitter)
+        self.right.setWidget(inspector)
+        self.view_panel=QWidget(); vp=QVBoxLayout(self.view_panel); vp.setContentsMargins(14,10,14,14); vp.setSpacing(4)
+        self.adjust_sliders={}
+        for key,title,low,high,default in [('brightness','Brightness',-100,100,0),('contrast','Contrast',-100,100,0),('gamma','Gamma',20,300,100)]:
+            row=QHBoxLayout(); row.addWidget(label(title)); row.addStretch(); value=label(''); row.addWidget(value); vp.addLayout(row)
+            slider=QSlider(Qt.Horizontal); slider.setRange(low,high); slider.setValue(default); slider.setAccessibleName(title)
+            slider.valueChanged.connect(self.adjustments_changed); vp.addWidget(slider); self.adjust_sliders[key]=(slider,value,default)
+        vp.addWidget(button('Reset adjustments',self.reset_adjustments)); vp.addSpacing(8)
+        self.minimap_check=QCheckBox('Minimap when zoomed in'); self.minimap_check.setChecked(self.canvas.show_minimap)
+        self.minimap_check.toggled.connect(lambda on:self.canvas.show_minimap!=on and self.toggle_minimap()); vp.addWidget(self.minimap_check)
+        self.grid_check=QCheckBox('Pixel grid from 1200%'); self.grid_check.setChecked(self.canvas.show_grid)
+        self.grid_check.toggled.connect(lambda on:self.canvas.show_grid!=on and self.toggle_grid()); vp.addWidget(self.grid_check)
+        vp.addStretch(); self.adjustments_changed()
+        self.docks={}
+        for key,title,widget,area in [('dataset','Dataset',self.left,Qt.LeftDockWidgetArea),('inspector','Inspector',self.right,Qt.RightDockWidgetArea),
+                                      ('view','Image view',self.view_panel,Qt.RightDockWidgetArea)]:
+            dock=QDockWidget(title,self.dock_host); dock.setObjectName(f'dock-{key}'); dock.setWidget(widget)
+            dock.setFeatures(QDockWidget.DockWidgetMovable|QDockWidget.DockWidgetFloatable|QDockWidget.DockWidgetClosable)
+            self.dock_host.addDockWidget(area,dock); self.docks[key]=dock
+        self.dock_host.resizeDocks([self.docks['dataset'],self.docks['inspector']],[260,290],Qt.Horizontal)
+        self.dock_host.resizeDocks([self.docks['inspector'],self.docks['view']],[620,220],Qt.Vertical)
+        self.default_layout=self.dock_host.saveState()
+        wrap=QWidget(); layout=QVBoxLayout(wrap); layout.setContentsMargins(8,8,8,8); layout.addWidget(self.dock_host)
         outer.addWidget(wrap,1); self.setCentralWidget(root)
         self.status=label('Ready · local-only workspace'); self.statusBar().addWidget(self.status,1)
         self.progress=QProgressBar(); self.progress.setMaximumWidth(180); self.progress.hide(); self.statusBar().addPermanentWidget(self.progress)
@@ -198,7 +219,13 @@ class Main(QMainWindow):
         view=self.menuBar().addMenu('View')
         add(view,'Fit image',self.canvas.fit,'fit'); add(view,'Actual pixels (100%)',self.canvas.actual_pixels,'actual')
         add(view,'Zoom in',lambda:self.canvas.zoom_by(1.25),'zoom_in'); add(view,'Zoom out',lambda:self.canvas.zoom_by(1/1.25),'zoom_out')
-        add(view,'Show minimap',self.toggle_minimap,'minimap'); add(view,'Show pixel grid',self.toggle_grid,'grid'); view.addSeparator()
+        add(view,'Show minimap',self.toggle_minimap,'minimap'); add(view,'Show pixel grid',self.toggle_grid,'grid')
+        add(view,'Reset image adjustments',self.reset_adjustments); view.addSeparator()
+        panels=view.addMenu('Panels')
+        for dock in self.docks.values(): panels.addAction(dock.toggleViewAction())
+        panels.addSeparator()
+        add(panels,'Default layout',lambda:self.apply_layout('default'))
+        add(panels,'All panels on the right',lambda:self.apply_layout('right'))
         add(view,'Focus mode',self.toggle_focus,'focus')
         add(view,'Toggle light / dark',self.toggle_theme); add(view,'Analysis',self.show_analysis)
         add(view,'Previous image',lambda:self.navigate(-1),'previous'); add(view,'Next image',lambda:self.navigate(1),'next')
@@ -382,9 +409,11 @@ class Main(QMainWindow):
 
     def toggle_minimap(self):
         self.canvas.toggle_minimap(); self.settings.setValue('minimap',self.canvas.show_minimap)
+        self.minimap_check.blockSignals(True); self.minimap_check.setChecked(self.canvas.show_minimap); self.minimap_check.blockSignals(False)
 
     def toggle_grid(self):
         self.canvas.toggle_grid(); self.settings.setValue('pixel_grid',self.canvas.show_grid)
+        self.grid_check.blockSignals(True); self.grid_check.setChecked(self.canvas.show_grid); self.grid_check.blockSignals(False)
 
     @Slot(object,str)
     def image_failed(self,token,error):
@@ -738,7 +767,29 @@ class Main(QMainWindow):
             self.project.set_setting('tasks',tasks); self.set_tool('select'); self.refresh_controls()
 
     def toggle_focus(self):
-        self.focus_mode=not self.focus_mode; self.left.setVisible(not self.focus_mode); self.right.setVisible(not self.focus_mode)
+        self.focus_mode=not self.focus_mode
+        if self.focus_mode:
+            self.pre_focus=self.dock_host.saveState()
+            for dock in self.docks.values(): dock.hide()
+        else: self.dock_host.restoreState(self.pre_focus)
+
+    def apply_layout(self,name):
+        self.focus_mode=False
+        self.dock_host.restoreState(self.default_layout)
+        for dock in self.docks.values(): dock.setFloating(False); dock.show()
+        if name=='right':
+            self.dock_host.addDockWidget(Qt.RightDockWidgetArea,self.docks['dataset'])
+            self.dock_host.tabifyDockWidget(self.docks['inspector'],self.docks['dataset'])
+            self.docks['inspector'].raise_()
+
+    def adjustments_changed(self,*_):
+        values={key:slider.value() for key,(slider,_,_) in self.adjust_sliders.items()}
+        for key,(slider,text,_) in self.adjust_sliders.items():
+            text.setText(f"{values[key]/100:.2f}" if key=='gamma' else f"{values[key]:+d}")
+        self.canvas.set_adjustments(values['brightness'],values['contrast'],values['gamma']/100)
+
+    def reset_adjustments(self):
+        for slider,_,default in self.adjust_sliders.values(): slider.setValue(default)
 
     def join_team(self):
         if self.job or self.sync_job or self.host or not self.save(): return
@@ -939,7 +990,7 @@ class Main(QMainWindow):
         self.loader.stop()
         if not self.save():
             self.fail('Cannot close safely','Saving failed. Your edits remain in this window. Resolve disk space or permissions and try Save again.'); event.ignore(); return
-        self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('splitter',self.splitter.saveState())
+        self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('layout',self.pre_focus if self.focus_mode else self.dock_host.saveState())
         self.sync_timer.stop()
         if self.host: self.host.stop(); self.host=None
         if self.project: self.project.close(); self.project=None

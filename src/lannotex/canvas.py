@@ -1,8 +1,9 @@
 """Native canvas. Geometry lives in the document, never in disposable graphics items."""
 from copy import deepcopy
 import math
+from PIL import Image
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 from .domain import Annotation, validate
 
@@ -10,6 +11,24 @@ from .domain import Annotation, validate
 MAX_PIXEL_SCALE = 64
 GRID_FROM_SCALE = 12
 MINIMAP = QSizeF(200, 140)
+
+
+def build_lut(brightness=0, contrast=0, gamma=1.):
+    """Display-only tone curve. brightness/contrast in -100..100, gamma 0.2..3. None = identity."""
+    if brightness == 0 and contrast == 0 and gamma == 1: return None
+    factor = 1 + contrast/100 if contrast <= 0 else 1 / (1 - min(contrast, 99)/100)
+    lut = []
+    for v in range(256):
+        x = min(1., max(0., (v/255 - .5)*factor + .5 + brightness/200))
+        lut.append(round(x ** (1/gamma) * 255))
+    return lut
+
+
+def apply_lut(image, lut):
+    w, h = image.width(), image.height()
+    pil = Image.frombuffer('RGBA', (w, h), bytes(image.constBits()), 'raw', 'BGRA', image.bytesPerLine(), 1)
+    out = pil.point(lut*3 + list(range(256))).tobytes('raw', 'BGRA')
+    return QImage(out, w, h, w*4, QImage.Format_ARGB32_Premultiplied).copy()
 
 
 class Canvas(QWidget):
@@ -49,12 +68,22 @@ class Canvas(QWidget):
         self.show_grid = True
         self.minimap_rect = QRectF()
         self.minimap_drag = False
+        self.adjustments = (0, 0, 1.)
+        self.lut = None
+        self.adjusted = None
+
+    def set_adjustments(self, brightness=0, contrast=0, gamma=1.):
+        self.adjustments = (brightness, contrast, gamma)
+        self.lut = build_lut(brightness, contrast, gamma)
+        self.adjusted = None
+        self.update()
 
     def set_image(self, image, source=None):
         """`image` is a display preview; `source` is the original (width, height) after EXIF rotation."""
         self.cancel()
         self.image = image
         self.detail = None
+        self.adjusted = None
         self.detail_requested = False
         self.source = source or ((image.width(), image.height()) if image is not None else None)
         self.fit()
@@ -212,7 +241,16 @@ class Canvas(QWidget):
         source = QRectF((visible.left()-r.left())*sx, (visible.top()-r.top())*sy, visible.width()*sx, visible.height()*sy)
         painter.save()
         painter.setRenderHint(QPainter.SmoothPixmapTransform, r.width()/image.width() < 3)
-        painter.drawImage(visible, image, source)
+        if self.lut is None:
+            painter.drawImage(visible, image, source)
+        else:
+            # Tone-adjust only the on-screen pixels; whole-pixel bounds keep the crop aligned with the geometry.
+            src = source.toAlignedRect().intersected(image.rect())
+            key = (image.cacheKey(), src.x(), src.y(), src.width(), src.height(), self.adjustments)
+            if self.adjusted is None or self.adjusted[0] != key:
+                self.adjusted = (key, apply_lut(image.copy(src), self.lut))
+            target = QRectF(r.left()+src.x()/sx, r.top()+src.y()/sy, src.width()/sx, src.height()/sy)
+            painter.drawImage(target, self.adjusted[1])
         painter.restore()
 
     def draw_grid(self, painter, r, scale):
