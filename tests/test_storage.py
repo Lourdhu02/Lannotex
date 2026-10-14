@@ -55,3 +55,15 @@ def test_save_annotations_validates_against_labels(tmp_path):
     with pytest.raises(ValueError):
         p.save_annotations(image,[Annotation("dog","box",[0,0,.5,.5])])
     p.close()
+
+def test_recovered_draft_keeps_original_base_revision(tmp_path):
+    from lannotex.storage import ConflictError
+    p=Project(tmp_path); p.add_label('cat'); ident=p.add_image(tmp_path/'a.png',100,100)
+    draft=Annotation('cat','box',[0,0,.5,.5]); p.save_draft(ident,[draft],base_revision=0)
+    p.save_annotations(ident,[Annotation('cat','classification')],actor='Other reviewer',clear_draft=False)
+    p.close()
+    p=Project(tmp_path,create=False); anns,negative,recovered,base=p.load_document(ident)
+    assert recovered and base==0 and anns[0].id==draft.id
+    with pytest.raises(ConflictError): p.save_annotations(ident,anns,negative,expected_revision=base)
+    assert p.load_annotations(ident)[0].kind=='classification'
+    p.close()

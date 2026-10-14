@@ -15,7 +15,18 @@ MIGRATIONS = [
      "CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)"],
     ["CREATE INDEX IF NOT EXISTS annotations_image ON annotations(image_id)",
      "CREATE INDEX IF NOT EXISTS images_status ON images(status)",
-     "CREATE TABLE IF NOT EXISTS drafts(image_id INTEGER PRIMARY KEY REFERENCES images(id), data TEXT NOT NULL, negative INTEGER NOT NULL DEFAULT 0)"]
+     "CREATE TABLE IF NOT EXISTS drafts(image_id INTEGER PRIMARY KEY REFERENCES images(id), data TEXT NOT NULL, negative INTEGER NOT NULL DEFAULT 0)"],
+    ["CREATE TABLE revisions(image_id INTEGER PRIMARY KEY REFERENCES images(id), revision INTEGER NOT NULL DEFAULT 0)",
+     "CREATE TABLE team_members(id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, active INTEGER NOT NULL DEFAULT 1)",
+     "CREATE TABLE team_audit(id INTEGER PRIMARY KEY AUTOINCREMENT, image_id INTEGER NOT NULL, member TEXT NOT NULL, revision INTEGER NOT NULL, saved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+     "CREATE TABLE team_changes(seq INTEGER PRIMARY KEY AUTOINCREMENT, image_id INTEGER NOT NULL)",
+     "CREATE TABLE team_links(image_id INTEGER PRIMARY KEY REFERENCES images(id), remote_revision INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, conflict INTEGER NOT NULL DEFAULT 0)",
+     "INSERT INTO revisions(image_id) SELECT id FROM images",
+     "INSERT INTO team_changes(image_id) SELECT id FROM images",
+     "CREATE TRIGGER image_added AFTER INSERT ON images BEGIN INSERT INTO revisions(image_id) VALUES(NEW.id); INSERT INTO team_changes(image_id) VALUES(NEW.id); END"],
+    ["ALTER TABLE team_audit ADD COLUMN data TEXT NOT NULL DEFAULT '[]'",
+     "ALTER TABLE team_audit ADD COLUMN negative INTEGER NOT NULL DEFAULT 0"],
+    ["ALTER TABLE drafts ADD COLUMN base_revision INTEGER"]
 ]
 
 
@@ -52,6 +63,7 @@ class Project:
 
     def _migrate(self):
         with self.conn:
+            self.conn.execute('BEGIN IMMEDIATE')
             self.conn.execute('CREATE TABLE IF NOT EXISTS migrations(version INTEGER PRIMARY KEY)')
             done = {r[0] for r in self.conn.execute('SELECT version FROM migrations')}
             if done and max(done) > len(MIGRATIONS): raise ValueError('Project requires a newer Lannotex version')
@@ -73,16 +85,21 @@ class Project:
         if not new or len(new) > 120: raise ValueError('Enter a label of 1–120 characters')
         with self.conn:
             self.conn.execute('UPDATE labels SET name=? WHERE name=?', (new, old))
-            for row in self.conn.execute('SELECT id,data FROM annotations').fetchall():
+            affected=set()
+            for row in self.conn.execute('SELECT id,image_id,data FROM annotations').fetchall():
                 data = json.loads(row['data'])
                 if data['label'] == old:
                     data['label'] = new
                     self.conn.execute('UPDATE annotations SET data=? WHERE id=?', (json.dumps(data), row['id']))
+                    affected.add(row['image_id'])
             for row in self.conn.execute('SELECT image_id,data FROM drafts').fetchall():
                 data = json.loads(row['data'])
                 for a in data:
                     if a['label'] == old: a['label'] = new
                 self.conn.execute('UPDATE drafts SET data=? WHERE image_id=?', (json.dumps(data), row['image_id']))
+            for ident in affected:
+                self.conn.execute('UPDATE revisions SET revision=revision+1 WHERE image_id=?',(ident,))
+                self.conn.execute('INSERT INTO team_changes(image_id) VALUES(?)',(ident,))
 
     def remove_label(self, name):
         for row in self.conn.execute('SELECT data FROM annotations UNION ALL SELECT data FROM drafts'):
@@ -105,9 +122,8 @@ class Project:
 
     def add_batch(self, records):
         with self.conn:
-            before = self.conn.total_changes
-            self.conn.executemany('INSERT OR IGNORE INTO images(path,width,height) VALUES(?,?,?)', records)
-            return self.conn.total_changes - before
+            inserted = self.conn.executemany('INSERT OR IGNORE INTO images(path,width,height) VALUES(?,?,?)', records)
+            return inserted.rowcount
 
     def images(self): return self.conn.execute('SELECT * FROM images ORDER BY path').fetchall()
     def image(self, ident): return self.conn.execute('SELECT * FROM images WHERE id=?', (ident,)).fetchone()
@@ -132,20 +148,42 @@ class Project:
         if draft: return [Annotation.from_dict(a) for a in json.loads(draft['data'])], bool(draft['negative']), True
         return self.load_annotations(image_id), self.image(image_id)['status'] == 'empty', False
 
-    def save_draft(self, image_id, annotations, negative=False):
+    def load_document(self, image_id):
         with self.conn:
-            self.conn.execute('INSERT OR REPLACE INTO drafts VALUES(?,?,?)',
-                              (image_id, json.dumps([a.to_dict() for a in annotations]), int(negative)))
+            self.conn.execute('BEGIN')
+            annotations,negative,recovered=self.load_state(image_id)
+            revision=self.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(image_id,)).fetchone()[0]
+            draft=self.conn.execute('SELECT base_revision FROM drafts WHERE image_id=?',(image_id,)).fetchone()
+            if draft and draft[0] is not None: revision=draft[0]
+            return annotations,negative,recovered,revision
 
-    def save_annotations(self, image_id, annotations, negative=False):
+    def save_draft(self, image_id, annotations, negative=False, base_revision=None):
+        with self.conn:
+            if base_revision is None:
+                base_revision=self.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(image_id,)).fetchone()[0]
+            self.conn.execute('INSERT INTO drafts(image_id,data,negative,base_revision) VALUES(?,?,?,?) '
+                              'ON CONFLICT(image_id) DO UPDATE SET data=excluded.data,negative=excluded.negative',
+                              (image_id, json.dumps([a.to_dict() for a in annotations]), int(negative),base_revision))
+
+    def save_annotations(self, image_id, annotations, negative=False, actor='Local owner', expected_revision=None, clear_draft=True):
         errors = validate_all(annotations, {r['name'] for r in self.labels()}, negative)
         if errors: raise ValueError('; '.join(errors))
         payload = [(a.id, image_id, json.dumps(a.to_dict(), separators=(',', ':'))) for a in annotations]
         with self.conn:
+            self.conn.execute('BEGIN IMMEDIATE')
+            current=self.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(image_id,)).fetchone()
+            if current is None: raise ValueError('Image does not exist')
+            if expected_revision is not None and current[0]!=expected_revision: raise ConflictError('Another reviewer saved this image. Reload or resolve the conflict before saving.')
             self.conn.execute('DELETE FROM annotations WHERE image_id=?', (image_id,))
             self.conn.executemany('INSERT INTO annotations VALUES(?,?,?)', payload)
             self.conn.execute('UPDATE images SET status=? WHERE id=?', ('empty' if negative else 'done' if annotations else 'new', image_id))
-            self.conn.execute('DELETE FROM drafts WHERE image_id=?', (image_id,))
+            if clear_draft: self.conn.execute('DELETE FROM drafts WHERE image_id=?', (image_id,))
+            self.conn.execute('UPDATE revisions SET revision=revision+1 WHERE image_id=?',(image_id,))
+            self.conn.execute('INSERT INTO team_changes(image_id) VALUES(?)',(image_id,))
+            self.conn.execute('INSERT INTO team_audit(image_id,member,revision,data,negative) VALUES(?,?,?,?,?)',
+                              (image_id,actor,current[0]+1,json.dumps([a.to_dict() for a in annotations]),int(negative)))
+            if self.setting('team_remote'):
+                self.conn.execute('UPDATE team_links SET dirty=1 WHERE image_id=?',(image_id,))
 
     def setting(self, key, default=None):
         row = self.conn.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
@@ -166,7 +204,10 @@ class Project:
         fd, temp = tempfile.mkstemp(dir=target.parent, suffix='.sqlite3'); os.close(fd)
         try:
             out = sqlite3.connect(temp)
-            try: self.conn.backup(out)
+            try:
+                self.conn.backup(out)
+                out.execute('INSERT OR REPLACE INTO settings VALUES(?,?)',('backup_source_root',json.dumps(str(self.root))))
+                out.commit()
             finally: out.close()
             os.replace(temp, target)
         finally:
@@ -186,4 +227,15 @@ class Project:
             try: check.backup(out)
             finally: out.close()
         finally: check.close()
-        return cls(folder, create=False)
+        restored=cls(folder,create=False)
+        old_root=restored.setting('backup_source_root')
+        if old_root:
+            with restored.conn:
+                for row in restored.images():
+                    old_path=Path(old_root)/row['path']
+                    restored.conn.execute('UPDATE images SET path=? WHERE id=?',(restored.reference(old_path),row['id']))
+        return restored
+
+
+class ConflictError(ValueError):
+    """A stale edit must never replace a newer shared revision."""

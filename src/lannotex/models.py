@@ -43,7 +43,7 @@ class ImageListModel(QAbstractListModel):
             state = {'new':'Unlabeled', 'done':'Labeled', 'empty':'No targets'}.get(row['status'],row['status'])
             return f"{Path(row['path']).name}\n{state}  ·  {row['width']} × {row['height']}"
         if role == Qt.ToolTipRole: return row['path']
-        if role == Qt.ForegroundRole and row['status'] != 'new': return QColor('#37b8a5')
+        if role == Qt.ForegroundRole and row['status'] != 'new': return QColor('#888888')
         if role == Qt.UserRole: return dict(row)
 
     def invalidate(self):

@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.0.2] — 2026-10-14
 
+### Desktop workflow refresh (local working tree)
+
+- Home screen with Create, Continue, recent projects, and explicit pipeline presets.
+- Monochrome white/black themes; classification, detection and segmentation expose only relevant controls.
+- Optional simultaneous team collaboration: host service, reviewer access tokens, revocation, local outbox, incremental sync, conflict resolution, and saved annotation history.
+- Forward migrations for revision and reviewer data; stale saves cannot silently replace newer work.
+- Native Qt interaction and two-client integration tests, including failed writes, PNG imports, all export formats, and native round trips.
+- Fixed PNG validation after EXIF inspection, trigger-inflated import counts, and backup relocation of relative image references.
+- Added reproducible image-import, decode, metadata-cache and memory benchmark.
+
 ### Added
 
 - Project renamed **LabelReview → Lannotex** across the codebase, packaging,

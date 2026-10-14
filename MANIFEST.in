@@ -1,7 +1,9 @@
 include LICENSE
 include CHANGELOG.md
 include Lannotex.spec
+include run_lannotex.py
+include requirements-windows-build.txt
 recursive-include docs *.md
-recursive-include LICENSES *.md
-recursive-include scripts *.ps1 *.sh
+recursive-include LICENSES *.md *.txt
+recursive-include scripts *.ps1 *.sh *.py
 recursive-include tests *.py

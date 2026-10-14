@@ -89,10 +89,10 @@ class Canvas(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor('#151a20'))
+        painter.fillRect(self.rect(), self.palette().base())
         painter.setRenderHint(QPainter.Antialiasing)
         if self.image is None:
-            painter.setPen(QColor('#8b98a9'))
+            painter.setPen(self.palette().text().color())
             painter.setFont(QFont('Segoe UI', 20, QFont.DemiBold))
             painter.drawText(self.rect().adjusted(24,-30,-24,-30), Qt.AlignCenter, self.empty_title)
             painter.setFont(QFont('Segoe UI', 10))

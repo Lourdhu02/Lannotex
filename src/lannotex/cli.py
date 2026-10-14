@@ -46,6 +46,16 @@ def build_parser():
     proj = sub.add_parser('new', help='create a new empty project folder')
     proj.add_argument('folder', help='folder to initialize as a project')
 
+    host = sub.add_parser('host', help='serve a team project from this computer')
+    host.add_argument('project')
+    host.add_argument('--bind', default='127.0.0.1', help='use 0.0.0.0 to accept LAN connections')
+    host.add_argument('--port', type=int, default=8765)
+    host.add_argument('--cert', help='TLS certificate PEM')
+    host.add_argument('--key', help='TLS private key PEM')
+    invite = sub.add_parser('invite', help='create a reviewer token on a project host')
+    invite.add_argument('project')
+    invite.add_argument('name')
+
     return parser
 
 
@@ -69,7 +79,19 @@ def main(argv=None):
         return 0
     if args.command == 'new':
         from .storage import Project
-        Project(args.folder, create=True)
+        Project(args.folder, create=True).close()
         print(f'Created project at {Path(args.folder).resolve()}')
+        return 0
+    if args.command == 'invite':
+        from .team import add_member
+        print(add_member(args.project, args.name))
+        return 0
+    if args.command == 'host':
+        from .team import TeamServer
+        server = TeamServer(args.project,args.bind,args.port,args.cert,args.key)
+        print(f"Team host listening on {args.bind}:{server.server_address[1]}. Ctrl+C stops hosting.")
+        try: server.serve_forever()
+        except KeyboardInterrupt: pass
+        finally: server.server_close()
         return 0
     return 0
