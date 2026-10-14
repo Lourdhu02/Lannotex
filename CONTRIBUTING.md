@@ -6,7 +6,7 @@ privacy-first — keep those values in mind in every change you make.
 ## Development setup
 
 ```bash
-git clone https://github.com/Lannotex/Lannotex.git
+git clone https://github.com/Lourdhu02/Lannotex.git
 cd Lannotex
 python -m venv .venv
 source .venv/bin/activate        # Windows: .\.venv\Scripts\Activate.ps1

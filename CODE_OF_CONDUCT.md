@@ -33,9 +33,9 @@ Examples of unacceptable behavior:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-`conduct@lannotex.dev`. All complaints will be reviewed and investigated
-promptly and fairly.
+reported privately to the project maintainers. Contact the maintainer
+[@Lourdhu02](https://github.com/Lourdhu02) directly. All complaints will be
+reviewed and investigated promptly and fairly.
 
 This Code of Conduct is adapted from the
 [Contributor Covenant](https://www.contributor-covenant.org), version 2.1.

@@ -4,10 +4,10 @@
 
 ![PyPI - Version](https://img.shields.io/pypi/v/lannotex)
 ![Python](https://img.shields.io/pypi/pyversions/lannotex)
-![License](https://img.shields.io/github/license/Lannotex/Lannotex)
-![CI](https://img.shields.io/github/actions/workflow/status/Lannotex/Lannotex/ci.yml?label=CI)
+![License](https://img.shields.io/github/license/Lourdhu02/Lannotex)
+![CI](https://img.shields.io/github/actions/workflow/status/Lourdhu02/Lannotex/ci.yml?label=CI)
 ![Platforms](https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-supported-brightgreen)
-[![stars](https://img.shields.io/github/stars/Lannotex/Lannotex?style=social)](https://github.com/Lannotex/Lannotex)
+[![stars](https://img.shields.io/github/stars/Lourdhu02/Lannotex?style=social)](https://github.com/Lourdhu02/Lannotex)
 
 Lannotex is a local-first desktop annotation tool built with PySide6/Qt. Projects are
 plain **SQLite databases** in a folder of your choice; source images are **never altered,
@@ -15,11 +15,6 @@ never uploaded, and never leave your disk**. When you're done, export to Labelme
 COCO, CSV, or Lannotex's native JSONL — all editable locally.
 
 *No login. No telemetry. No cloud. Your data stays yours.*
-
-## Screenshot
-
-![Lannotex main window](docs/screenshot.png)
-<!-- Replace with a real screenshot before release — this placeholder keeps the README layout final. -->
 
 ## Features
 
@@ -52,14 +47,14 @@ lannotex
 ### Standalone binaries
 
 Grab the prebuilt executable for your OS from the
-[Releases](https://github.com/Lannotex/Lannotex/releases) page. Binaries run without a
+[Releases](https://github.com/Lourdhu02/Lannotex/releases) page. Binaries run without a
 separate Python install. The app stores project files only in the project directory — it
 never writes project data into its installation directory.
 
 ### From source
 
 ```bash
-git clone https://github.com/Lannotex/Lannotex.git
+git clone https://github.com/Lourdhu02/Lannotex.git
 cd Lannotex
 python -m venv .venv
 source .venv/bin/activate        # Windows: .\.venv\Scripts\Activate.ps1
@@ -139,7 +134,7 @@ configurable themes/layouts, and 10 GB dataset support.
 
 Contributions are welcome! Start with [CONTRIBUTING.md](CONTRIBUTING.md) and our
 [Code of Conduct](CODE_OF_CONDUCT.md). Please report bugs through
-[GitHub Issues](https://github.com/Lannotex/Lannotex/issues).
+[GitHub Issues](https://github.com/Lourdhu02/Lannotex/issues).
 
 ## License
 

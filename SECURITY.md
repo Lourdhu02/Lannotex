@@ -5,8 +5,10 @@ uploads your images or annotations. We still take security seriously.
 
 ## Reporting a vulnerability
 
-Please **do not** open a public issue for security problems. Email
-`security@lannotex.dev` with:
+Please **do not** open a public issue for security problems. Use GitHub's
+private vulnerability reporting instead: open the repository's **Security** tab
+and choose **Report a vulnerability**
+(<https://github.com/Lourdhu02/Lannotex/security/advisories/new>). Include:
 
 - A description of the vulnerability and the affected versions.
 - Steps to reproduce, including any project/sample data needed.

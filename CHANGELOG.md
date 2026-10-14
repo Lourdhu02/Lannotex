@@ -39,6 +39,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   environment variable now use `Lannotex`/`LANNOTEX_SMOKE_RESULT`.
 - Expanded test coverage (see `tests/`) for domain, storage, exporters, and CLI.
 
+### Fixed
+
+- `LICENSE` now contains the MIT text that `pyproject.toml` and the README
+  declare (the file previously held the Boost Software License 1.0).
+- Repository URLs, badges, and clone instructions now point at the real
+  `Lourdhu02/Lannotex` remote instead of a non-existent `Lannotex/Lannotex`.
+- Removed the broken `docs/screenshot.png` reference from the README.
+- Security and conduct reports now use GitHub channels instead of the
+  placeholder `@lannotex.dev` addresses.
+- The release workflow only publishes to PyPI on a manual dispatch with
+  `publish` enabled; tag pushes build and attach binaries only.
+
 ## [0.0.1] — 2026-10-14
 
 - Initial offline PySide6 desktop application.

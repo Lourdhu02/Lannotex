@@ -44,10 +44,10 @@ lannotex = "lannotex.cli:main"
 lannotex-gui = "lannotex.app:main"
 
 [project.urls]
-Homepage = "https://github.com/Lannotex/Lannotex"
-Source = "https://github.com/Lannotex/Lannotex"
-Issues = "https://github.com/Lannotex/Lannotex/issues"
-Documentation = "https://github.com/Lannotex/Lannotex#readme"
+Homepage = "https://github.com/Lourdhu02/Lannotex"
+Source = "https://github.com/Lourdhu02/Lannotex"
+Issues = "https://github.com/Lourdhu02/Lannotex/issues"
+Documentation = "https://github.com/Lourdhu02/Lannotex#readme"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
