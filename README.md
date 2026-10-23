@@ -66,7 +66,7 @@ for details.
 ## Your first dataset in 60 seconds
 
 1. **Create a project** and pick a pipeline: *Classification*, *Object detection*, *Segmentation*, or *Combined*. Each one shows only the tools it needs.
-2. **Import a folder** (`Ctrl+I`). JPEG, PNG and WebP files are checked and referenced in place, not copied.
+2. **Import a folder** (`Ctrl+I`). JPEG, PNG, WebP, TIFF and BMP files are checked and referenced in place, not copied.
 3. **Add labels**, then draw: `B` for boxes, `P` for polygons (`Enter` finishes), `V` to select and edit.
 4. **Save & next** with `Ctrl+Enter`. Autosave and recovery drafts run in the background anyway.
 5. **Export** to the format your training code expects.
@@ -89,7 +89,7 @@ Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.git
 | | |
 | --- | --- |
 | **Annotate** | Bounding boxes · polygons with vertex drag, insert, and delete · multi-label image classes · "no target" negatives · 100-step undo/redo · zoom under the pointer, pan, arrow-key nudging · focus mode · light and dark themes |
-| **View** | Sharp full-resolution zoom up to 6400% · next/previous images decoded ahead · minimap · pixel grid · brightness, contrast and gamma · thumbnails · dockable panels you can float onto a second monitor, with saved layouts · `Ctrl+K` command palette |
+| **View** | Any image size: a 900 MP TIFF reopens in 0.1 s and pans at ~100 fps from a cached tile pyramid, using under 200 MB · sharp full-resolution zoom to 6400% · next/previous images decoded ahead · minimap · pixel grid · brightness, contrast and gamma · thumbnails · dockable panels you can float onto a second monitor, with saved layouts · `Ctrl+K` command palette |
 | **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
 | **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
 | **Export** | Labelme JSON · ready-to-train YOLO (`images/`, `labels/`, `data.yaml`) · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |

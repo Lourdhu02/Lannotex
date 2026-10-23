@@ -137,7 +137,7 @@ def large_project(tmp_path):
     p.close(); return root
 
 
-def test_full_resolution_detail_prefetch_minimap_and_grid(window,qt,tmp_path):
+def test_full_resolution_tiles_prefetch_minimap_and_grid(window,qt,tmp_path):
     w=window; root=large_project(tmp_path); open_ready(w,qt,root)
     c=w.canvas
     assert c.image.width()==2560 and c.source==(5000,1200)
@@ -147,8 +147,11 @@ def test_full_resolution_detail_prefetch_minimap_and_grid(window,qt,tmp_path):
 
     c.actual_pixels(); c.repaint()
     assert abs(c.source_scale()-1)<0.01 and w.zoom_label.text()=='100%'
-    wait_for(qt,lambda:c.detail is not None)
-    assert c.detail.width()==5000 and c.detail.height()==1200
+    wait_for(qt,lambda:c.pyramid is not None and c.pyramid.complete() and w.tile_job is None)
+    assert c.pyramid.level_size(0)==(5000,1200)
+    assert c.pyramid.tile_path(0,0,0).is_file()
+    c.repaint()
+    assert c.draw_tiles_count>0, 'zoomed-in painting must come from tiles'
 
     c.repaint(); assert not c.minimap_rect.isEmpty()
     QTest.mouseClick(c,Qt.LeftButton,pos=c.minimap_rect.center().toPoint())
@@ -268,12 +271,10 @@ def test_draft_writes_are_debounced(window,qt,tmp_path):
     w.timer.stop(); assert w.save() and drafts()==0
 
 
-def test_detail_decode_respects_pixel_limit(tmp_path):
-    from lannotex.workers import decode, decode_full
+def test_preview_decode_is_capped(tmp_path):
+    from lannotex.workers import decode
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)
     assert decode(path).width()==2560
-    assert decode_full(path).width()==3000
-    with pytest.raises(ValueError, match='detail limit'): decode_full(path, max_pixels=1_000_000)
 
 
 def test_team_client_download_edit_save_sync(window,qt,tmp_path):

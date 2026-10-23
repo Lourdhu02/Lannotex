@@ -20,6 +20,7 @@ from .exporters import analyze, export_project, import_annotations
 from .models import ImageListModel
 from .palette import CommandPalette, menu_commands
 from .thumbnails import Thumbnails
+from .tiles import Pyramid, cache_dir as tile_cache_dir, prune as prune_tiles
 from .icons import icon, logo
 from .storage import ConflictError, Project, atomic_text
 from .theme import apply_theme
@@ -66,7 +67,9 @@ class Main(QMainWindow):
         self.loader = ImageLoader(self)
         self.thumbnails = Thumbnails(self); self.thumbnails.prune_later()
         self.loader.ready.connect(self.image_ready); self.loader.failed.connect(self.image_failed)
-        self.loader.detail_ready.connect(self.detail_ready); self.loader.detail_failed.connect(self.detail_failed)
+        self.tile_pool = QThreadPool(self); self.tile_pool.setMaxThreadCount(1); self.tile_job = None
+        self.tile_cache_root = tile_cache_dir()
+        self.tile_pool.start(Job(lambda cancel,progress: prune_tiles(self.tile_cache_root)))
         self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.save)
         self.filter_timer = QTimer(self); self.filter_timer.setSingleShot(True); self.filter_timer.timeout.connect(self.filter_images)
         self.draft_timer = QTimer(self); self.draft_timer.setSingleShot(True); self.draft_timer.timeout.connect(self.flush_draft)
@@ -149,7 +152,7 @@ class Main(QMainWindow):
         middle.addLayout(tools)
         self.canvas=Canvas(); self.canvas.edited.connect(self.commit); self.canvas.selected.connect(self.selection_changed)
         self.canvas.message.connect(self.notice); self.canvas.zoomed.connect(lambda n:self.zoom_label.setText(f'{n}%'))
-        self.canvas.detail_wanted.connect(self.request_detail)
+        self.canvas.tiles_wanted.connect(self.request_tiles)
         self.canvas.show_minimap=self.settings.value('minimap',True,type=bool); self.canvas.show_grid=self.settings.value('pixel_grid',True,type=bool)
         middle.addWidget(self.canvas,1)
         self.canvas_hint=label('B  Draw box   ·   P  Draw polygon   ·   Space + drag  Pan   ·   F  Fit')
@@ -391,7 +394,7 @@ class Main(QMainWindow):
         if self.current and record['id']==self.current['id'] and (self.canvas.image is not None or self.loading): return
         if not self.save():
             self.images.selectionModel().blockSignals(True); self.images.setCurrentIndex(previous); self.images.selectionModel().blockSignals(False); return
-        self.canvas.cancel(); self.timer.stop(); self.token+=1; self.current=dict(record)
+        self.canvas.cancel(); self.timer.stop(); self.cancel_tiles(); self.token+=1; self.current=dict(record)
         annotations,negative,recovered,revision=self.project.load_document(record['id'])
         self.document=Document(annotations,negative); self.dirty=recovered; self.loading=True
         if recovered: self.document.restore_history(self.project.load_history(record['id']))
@@ -408,7 +411,19 @@ class Main(QMainWindow):
             def download(cancel,progress):
                 client.download(ident,path,cancel); return (token,str(path))
             self.start_job('download',download)
-        else: self.loader.request(self.token,path)
+        else:
+            cached=self.cached_pyramid(path,record)
+            if cached is not None:
+                # Reopening a huge image: its tiles are already on disk, so skip decoding the source.
+                self.image_ready(self.token,cached.compose(cached.preview_level()))
+                self.canvas.set_pyramid(cached); self.canvas.tiles_requested=True
+            else: self.loader.request(self.token,path)
+
+    def cached_pyramid(self,path,record):
+        if not record['width'] or not record['height']: return None
+        try: pyramid=Pyramid(path,record['width'],record['height'],self.tile_cache_root)
+        except OSError: return None
+        return pyramid if pyramid.complete() else None
 
     @Slot(object,object)
     def image_ready(self,token,image):
@@ -428,16 +443,37 @@ class Main(QMainWindow):
                 if path.is_file(): paths.append(path)
         self.loader.prefetch(paths)
 
-    def request_detail(self):
-        if self.current: self.loader.request_detail(self.token,self.project.resolve(self.current['path']))
+    def request_tiles(self):
+        """Zooming past the preview asks for full-resolution tiles; build them once, then reuse."""
+        if not self.current or not self.project: return
+        path=self.project.resolve(self.current['path'])
+        if not path.is_file(): return
+        try: pyramid=Pyramid(path,self.current['width'],self.current['height'],tile_cache_dir())
+        except OSError as error:
+            self.notice(f'Showing the preview at this zoom: {error}'); return
+        self.canvas.set_pyramid(pyramid)
+        if pyramid.complete() or self.tile_job: return
+        job=Job(pyramid.build)
+        job.events.progress.connect(self.tiles_progress)
+        job.events.error.connect(self.tiles_error)
+        job.events.finished.connect(self.tiles_finished)
+        self.tile_job=job
+        self.tile_pool.start(job)
 
-    @Slot(object,object)
-    def detail_ready(self,token,image):
-        if token==self.token: self.canvas.set_detail(image)
+    @Slot(int,str)
+    def tiles_progress(self,value,message):
+        self.notice(message); self.canvas.update()
 
-    @Slot(object,str)
-    def detail_failed(self,token,error):
-        if token==self.token: self.notice(f'Showing the preview at this zoom: {error}')
+    @Slot(str)
+    def tiles_error(self,error):
+        self.notice(f'Showing the preview at this zoom: {error}')
+
+    @Slot()
+    def tiles_finished(self):
+        self.tile_job=None; self.canvas.update()
+
+    def cancel_tiles(self):
+        if self.tile_job: self.tile_job.cancel.set()
 
     def toggle_minimap(self):
         self.canvas.toggle_minimap(); self.settings.setValue('minimap',self.canvas.show_minimap)
@@ -1057,6 +1093,7 @@ class Main(QMainWindow):
             self.cancel_job(); self.loader.stop()
             self.notice('Finishing the active file operation. Close again when it has stopped.'); event.ignore(); return
         self.loader.stop(); self.thumbnails.pool.clear(); self.thumbnails.pool.waitForDone(3000)
+        self.cancel_tiles(); self.tile_pool.clear(); self.tile_pool.waitForDone(5000)
         if not self.save():
             self.fail('Cannot close safely','Saving failed. Your edits remain in this window. Resolve disk space or permissions and try Save again.'); event.ignore(); return
         self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('layout',self.pre_focus if self.focus_mode else self.dock_host.saveState())

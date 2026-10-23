@@ -6,6 +6,7 @@ from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 from .domain import Annotation, validate, validate_cached
+from .tiles import TILE, TileCache
 
 
 CACHE_LIMIT = 8192
@@ -37,7 +38,7 @@ class Canvas(QWidget):
     selected = Signal(object)
     zoomed = Signal(int)
     message = Signal(str)
-    detail_wanted = Signal()
+    tiles_wanted = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -62,9 +63,11 @@ class Canvas(QWidget):
         self.space = False
         self.empty_title = 'Your next dataset starts here'
         self.empty_detail = 'Create or open a project, then import your images.'
-        self.detail = None
+        self.pyramid = None
+        self.draw_tiles_count = 0
+        self.tiles = TileCache()
         self.source = None
-        self.detail_requested = False
+        self.tiles_requested = False
         self.show_minimap = True
         self.show_grid = True
         self.minimap_rect = QRectF()
@@ -85,15 +88,20 @@ class Canvas(QWidget):
         """`image` is a display preview; `source` is the original (width, height) after EXIF rotation."""
         self.cancel()
         self.image = image
-        self.detail = None
+        self.pyramid = None
         self.adjusted = None
-        self.detail_requested = False
+        self.tiles_requested = False
         self.source = source or ((image.width(), image.height()) if image is not None else None)
         self.fit()
 
-    def set_detail(self, image):
-        self.detail = image
+    def set_pyramid(self, pyramid):
+        self.pyramid = pyramid
         self.update()
+
+    def preview_scale(self):
+        """Screen pixels per source pixel at which the preview stops carrying real detail."""
+        if self.image is None or not self.source: return 1.
+        return self.image.width() / self.source[0]
 
     def needs_detail(self):
         return self.image is not None and self.source is not None and self.source[0] > self.image.width()
@@ -231,11 +239,12 @@ class Canvas(QWidget):
             return
         r = self.image_rect()
         scale = self.source_scale()
-        preview_scale = self.image.width() / self.source[0]
-        if self.detail is None and scale > preview_scale * 1.05 and self.needs_detail() and not self.detail_requested:
-            self.detail_requested = True; self.detail_wanted.emit()
-        use_detail = self.detail is not None and scale > preview_scale
-        self.draw_visible(painter, r, self.detail if use_detail else self.image)
+        zoomed_in = scale > self.preview_scale() * 1.05 and self.needs_detail()
+        if zoomed_in and not self.tiles_requested:
+            self.tiles_requested = True; self.tiles_wanted.emit()
+        # The preview is always painted first, so missing tiles simply look soft, never blank.
+        self.draw_visible(painter, r, self.image)
+        self.draw_tiles_count = self.draw_tiles(painter, r, scale) if zoomed_in and self.pyramid is not None else 0
         painter.setClipRect(r)
         if self.show_grid and scale >= GRID_FROM_SCALE: self.draw_grid(painter, r, scale)
         shown = self.preview if self.preview is not None else self.annotations
@@ -294,6 +303,37 @@ class Canvas(QWidget):
             target = QRectF(r.left()+src.x()/sx, r.top()+src.y()/sy, src.width()/sx, src.height()/sy)
             painter.drawImage(target, self.adjusted[1])
         painter.restore()
+
+    def draw_tiles(self, painter, r, scale):
+        """Paint only the tiles the viewport touches, at the level closest to screen resolution."""
+        pyramid = self.pyramid
+        level = pyramid.level_for_scale(scale)
+        if not pyramid.has_level(level):
+            level = next((k for k in range(level, pyramid.levels) if pyramid.has_level(k)), None)
+            if level is None: return 0
+        width, height = pyramid.level_size(level)
+        cols, rows = pyramid.grid(level)
+        left, top, right, bottom = self.visible_bounds(r)
+        first_col = max(0, int(left * width) // TILE)
+        last_col = min(cols - 1, int(right * width) // TILE)
+        first_row = max(0, int(top * height) // TILE)
+        last_row = min(rows - 1, int(bottom * height) // TILE)
+        painter.save()
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, scale < 2)
+        drawn = 0
+        for row in range(first_row, last_row + 1):
+            for col in range(first_col, last_col + 1):
+                tile = self.tiles.get(pyramid, level, col, row)
+                if tile is None: continue
+                if self.lut is not None: tile = apply_lut(tile, self.lut)
+                x0, y0 = col * TILE / width, row * TILE / height
+                x1 = min(1., (col * TILE + tile.width()) / width)
+                y1 = min(1., (row * TILE + tile.height()) / height)
+                painter.drawImage(QRectF(r.left() + x0 * r.width(), r.top() + y0 * r.height(),
+                                         (x1 - x0) * r.width(), (y1 - y0) * r.height()), tile)
+                drawn += 1
+        painter.restore()
+        return drawn
 
     def draw_grid(self, painter, r, scale):
         visible = r.intersected(QRectF(self.rect()))

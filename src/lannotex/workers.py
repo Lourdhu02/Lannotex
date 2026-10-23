@@ -9,7 +9,22 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 from PySide6.QtGui import QImage
 from .storage import Project
 
-FORMATS = {'.jpg', '.jpeg', '.png', '.webp'}
+FORMATS = {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.bmp'}
+HIGH_DEPTH = {'I', 'I;16', 'I;16B', 'I;16L', 'I;16N', 'F'}
+
+
+def to_rgb(image):
+    """8-bit RGB for display. A 16-bit or float image is stretched from its own range,
+    because converting it directly would clip almost everything to black or white."""
+    if image.mode in HIGH_DEPTH:
+        low, high = image.getextrema()
+        span = (high - low) or 1
+        scaled = image.convert('I') if image.mode != 'I' else image
+        # Keep this expression linear: Pillow probes it to build the scale/offset in C.
+        image = scaled.point(lambda v: (v - low) * (255.0 / span)).convert('L')
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    return image
 
 
 class Events(QObject):
@@ -69,7 +84,6 @@ def import_images(root, sources, cancel, progress):
 
 
 PREVIEW_EDGE = 2560
-DETAIL_MAX_PIXELS = 64_000_000
 
 
 def to_qimage(image):
@@ -83,31 +97,24 @@ def decode(path, edge=PREVIEW_EDGE):
     """Fast display preview; stored coordinates/dimensions remain full resolution."""
     with Image.open(path) as image:
         image.draft('RGB',(edge,edge))
-        image = ImageOps.exif_transpose(image)
+        image = to_rgb(ImageOps.exif_transpose(image))
         image.thumbnail((edge,edge),Image.Resampling.LANCZOS)
         return to_qimage(image)
 
 
-def decode_full(path, max_pixels=DETAIL_MAX_PIXELS):
-    with Image.open(path) as image:
-        if image.width*image.height > max_pixels:
-            raise ValueError(f'{image.width:,} × {image.height:,} px exceeds the {max_pixels/1e6:.0f} MP detail limit')
-        return to_qimage(ImageOps.exif_transpose(image))
-
-
 class ImageLoader(QObject):
-    """One background decoder with priorities: current image, then full-resolution detail, then prefetch."""
+    """One background decoder: the current image first, then prefetch of its neighbours.
+
+    Full-resolution viewing is served by tiles.Pyramid, not by decoding the whole image.
+    """
     ready = Signal(object, object)
     failed = Signal(object, str)
-    detail_ready = Signal(object, object)
-    detail_failed = Signal(object, str)
 
     def __init__(self, parent=None, budget=96*1024*1024):
         super().__init__(parent)
         self.pool = QThreadPool(self); self.pool.setMaxThreadCount(1)
         self.cache = OrderedDict(); self.bytes = 0; self.budget = budget
-        self.active = None; self.pending = None; self.pending_detail = None; self.prefetching = []
-        self.detail = None
+        self.active = None; self.pending = None; self.prefetching = []
 
     @staticmethod
     def key(path):
@@ -120,13 +127,6 @@ class ImageLoader(QObject):
             self.cache.move_to_end(key); self.ready.emit(token,self.cache[key]); return
         self.pending = (token,key); self._pump()
 
-    def request_detail(self, token, path, max_pixels=DETAIL_MAX_PIXELS):
-        try: key = self.key(path)
-        except OSError as e: self.detail_failed.emit(token,str(e)); return
-        if self.detail and self.detail[0] == key: self.detail_ready.emit(token,self.detail[1]); return
-        self.detail = None
-        self.pending_detail = (token,key,max_pixels); self._pump()
-
     def prefetch(self, paths):
         for path in paths:
             try: key = self.key(path)
@@ -136,7 +136,7 @@ class ImageLoader(QObject):
 
     def stop(self):
         """Drop queued work and wait for the in-flight decode (decodes cannot be interrupted)."""
-        self.pending = None; self.pending_detail = None; self.prefetching.clear()
+        self.pending = None; self.prefetching.clear()
         self.pool.waitForDone(5000)
 
     def _pump(self):
@@ -145,9 +145,6 @@ class ImageLoader(QObject):
             (token,key), self.pending = self.pending, None
             if key in self.prefetching: self.prefetching.remove(key)
             self._start('preview', token, key, lambda: decode(key[0]))
-        elif self.pending_detail:
-            (token,key,limit), self.pending_detail = self.pending_detail, None
-            self._start('detail', token, key, lambda: decode_full(key[0], limit))
         elif self.prefetching:
             key = self.prefetching.pop(0)
             if key in self.cache: self._pump(); return
@@ -170,15 +167,12 @@ class ImageLoader(QObject):
     @Slot(object)
     def _loaded(self, payload):
         kind,token,key,image = payload
-        if kind == 'detail':
-            self.detail = (key,image); self.detail_ready.emit(token,image); return
         self._store(key,image)
         if kind == 'preview': self.ready.emit(token,image)
 
     @Slot(str)
     def _error(self, error):
         if self.active_kind == 'preview': self.failed.emit(self.active_token,error)
-        elif self.active_kind == 'detail': self.detail_failed.emit(self.active_token,error)
 
     @Slot()
     def _finished(self):

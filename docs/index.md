@@ -61,7 +61,7 @@ telemetry, and no network traffic unless you deliberately host or join a team.
 | **Pipelines** | Classification, detection, segmentation, or combined |
 | **Platforms** | Windows, macOS, Linux; Python 3.11–3.14 or standalone binaries |
 | **Exports** | Labelme JSON, YOLO boxes, COCO JSON, classification CSV, native JSONL |
-| **Imports** | Images (JPEG, PNG, WebP), Labelme JSON, native JSONL |
+| **Imports** | Images (JPEG, PNG, WebP, TIFF, BMP, including 16-bit), Labelme JSON, native JSONL |
 | **License** | MIT |
 
 ## Where to next

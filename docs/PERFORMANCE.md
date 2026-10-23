@@ -1,3 +1,47 @@
+# Viewing an image larger than memory — 2026-10-24
+
+Reproduce with `python scripts/bench/huge_image.py --pixels 30000`. It generates a synthetic
+30,000 × 30,000 px (900 MP) deflate TIFF once, then measures opening, panning and zooming it.
+Same machine as below. The window is 1600 × 1000.
+
+| Measurement | 144 MP | 900 MP |
+| --- | ---: | ---: |
+| First open, never seen before | 809 ms | 2771 ms |
+| Building the tile pyramid (once per image) | 1.8 s | 9.0 s |
+| **Reopening after that** | **65 ms** | **98 ms** |
+| Pan at 100 % zoom, p50 | 2.7 ms | 10.3 ms |
+| Pan at 100 % zoom, p95 | 18.2 ms | 25.9 ms |
+| Zoom step, p50 | 5.6 ms | 6.1 ms |
+| Memory while viewing | 145 MB | 196 MB |
+| Tile cache on disk | 6 MB | 37 MB |
+
+An image is cut into 512 px tiles across seven halving levels, written once to the user cache
+folder and reused forever after. The canvas draws only the tiles the viewport touches, at the
+level closest to screen resolution, so **memory follows the size of the window, not the size of
+the image**: 196 MB holds a 900 MP image that would need 2.7 GB to decode whole. The preview is
+always painted underneath, so a tile that has not loaded yet looks soft rather than blank. The
+64 MP cap on full-resolution viewing is gone.
+
+Reopening is fast because the pyramid replaces decoding the source entirely: the preview is
+stitched from cached tiles instead.
+
+## What is not met yet
+
+The target was first paint under 1 s and peak memory under 1.5 GB at 900 MP. Reopening meets
+both. **A first-ever open does not**: Pillow cannot decode part of a TIFF, so building the
+pyramid decodes the whole image once, which costs 2.8 s to first paint and about 7.5 GB peak.
+Removing three redundant full-size copies cut that from 12.3 s and 10.9 GB, but one full decode
+remains unavoidable here. In practice the budget is met for images up to roughly 400 MP.
+
+Streaming tile reads would fix it. Measured alternatives: `tifffile` reads a 1024 × 1024 region
+of this file with about 7 MB of Python memory but takes ~370 ms per region, far too slow to pan
+with, and it would add numpy and zarr to the install. The Rust `tiff` crate reading native tiles
+is the route that fixes cold open without either cost, and that is the next step.
+
+Pan p95 is above a 16.7 ms frame because the first touch of a tile reads and decodes it from
+disk; p50 is comfortably inside. Prefetching the tiles around the viewport is the obvious fix
+and is not implemented.
+
 # Interaction latency on a dense image — 2026-10-24
 
 Reproduce with `python scripts/bench/interaction.py --shapes N`. The script builds one image

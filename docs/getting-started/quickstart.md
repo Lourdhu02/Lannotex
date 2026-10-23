@@ -22,7 +22,7 @@ You can change the enabled tasks later from **Project → Project tasks…**.
 ## 2. Import images
 
 Use **+ Folder** or **+ Files** in the Dataset panel, or press ++ctrl+i++. Lannotex scans
-folders recursively for JPEG, PNG, and WebP files and checks each one. Damaged files are
+folders recursively for JPEG, PNG, WebP, TIFF and BMP files and checks each one. Damaged files are
 reported, not imported.
 
 Images are **referenced, not copied**. The project stores each path relative to the
