@@ -5,9 +5,10 @@ from PIL import Image
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
-from .domain import Annotation, validate
+from .domain import Annotation, validate, validate_cached
 
 
+CACHE_LIMIT = 8192
 MAX_PIXEL_SCALE = 64
 GRID_FROM_SCALE = 12
 MINIMAP = QSizeF(200, 140)
@@ -68,6 +69,8 @@ class Canvas(QWidget):
         self.show_grid = True
         self.minimap_rect = QRectF()
         self.minimap_drag = False
+        self._polygons = {}
+        self._boxes = {}
         self.adjustments = (0, 0, 1.)
         self.lut = None
         self.adjusted = None
@@ -131,8 +134,43 @@ class Canvas(QWidget):
 
     def set_annotations(self, annotations):
         self.annotations = deepcopy(annotations)
+        self._polygons.clear()
+        self._boxes.clear()
         if not any(a.id == self.selection for a in annotations): self.select(None)
         self.update()
+
+    def visible_bounds(self, rect):
+        """The on-screen viewport expressed in normalized image coordinates."""
+        view = QRectF(self.rect())
+        return ((view.left()-rect.left())/rect.width(), (view.top()-rect.top())/rect.height(),
+                (view.right()-rect.left())/rect.width(), (view.bottom()-rect.top())/rect.height())
+
+    def bounds(self, a):
+        """Normalized (left, top, right, bottom), memoized per annotation object."""
+        hit = self._boxes.get(id(a))
+        if hit is not None and hit[0] is a:
+            return hit[1]
+        points = self.vertices(a)
+        if not points:
+            box = None
+        else:
+            xs = [p[0] for p in points]
+            ys = [p[1] for p in points]
+            box = (min(xs), min(ys), max(xs), max(ys))
+        if len(self._boxes) > CACHE_LIMIT: self._boxes.clear()
+        self._boxes[id(a)] = (a, box)
+        return box
+
+    def screen_polygon(self, a, rect):
+        """Screen-space QPolygonF, rebuilt only when the shape or the view transform changes."""
+        key = (round(rect.left(), 3), round(rect.top(), 3), round(rect.width(), 3), round(rect.height(), 3))
+        hit = self._polygons.get(id(a))
+        if hit is not None and hit[0] is a and hit[1] == key:
+            return hit[2]
+        poly = QPolygonF([self.screen(p) for p in self.vertices(a)])
+        if len(self._polygons) > CACHE_LIMIT: self._polygons.clear()
+        self._polygons[id(a)] = (a, key, poly)
+        return poly
 
     def set_mode(self, mode):
         self.cancel()
@@ -201,15 +239,19 @@ class Canvas(QWidget):
         painter.setClipRect(r)
         if self.show_grid and scale >= GRID_FROM_SCALE: self.draw_grid(painter, r, scale)
         shown = self.preview if self.preview is not None else self.annotations
+        window = self.visible_bounds(r)
         for n, a in enumerate(shown, 1):
             pts = self.vertices(a)
             if not pts: continue
+            box = self.bounds(a)
+            if box and (box[2] < window[0] or box[0] > window[2] or box[3] < window[1] or box[1] > window[3]):
+                continue
             color = QColor(self.colors.get(a.label, '#38bfa7'))
             selected = a.id == self.selection
             painter.setPen(QPen(color, 2.4 if selected else 1.5))
             fill = QColor(color); fill.setAlphaF(self.opacity)
             painter.setBrush(fill)
-            poly = QPolygonF([self.screen(p) for p in pts])
+            poly = self.screen_polygon(a, r)
             painter.drawPolygon(poly)
             anchor = poly.boundingRect().topLeft()
             text = f'{n}  {a.label}'
@@ -325,8 +367,12 @@ class Canvas(QWidget):
                     self.vertex = i
                     self.drag = {'kind':'vertex','start':p,'original':deepcopy(chosen),'vertex':i}
                     self.update(); return
+        rect = self.image_rect()
         for a in reversed(self.annotations):
-            if QPolygonF([self.screen(v) for v in self.vertices(a)]).containsPoint(event.position(), Qt.OddEvenFill):
+            box = self.bounds(a)
+            if box is None or not (box[0] <= p[0] <= box[2] and box[1] <= p[1] <= box[3]):
+                continue
+            if self.screen_polygon(a, rect).containsPoint(event.position(), Qt.OddEvenFill):
                 self.select(a.id)
                 self.drag = {'kind':'move','start':p,'original':deepcopy(a)}
                 return
@@ -366,7 +412,8 @@ class Canvas(QWidget):
         self.drag = None
         if kind == 'pan': self.setCursor(Qt.OpenHandCursor if self.space else Qt.ArrowCursor); return
         if self.preview is not None:
-            errors = [error for a in self.preview for error in validate(a,set(self.colors))]
+            labels = set(self.colors)
+            errors = [error for a in self.preview for error in validate_cached(a, labels)]
             if errors: self.message.emit(errors[0])
             else:
                 if kind == 'draw': self.selection = self.preview[-1].id

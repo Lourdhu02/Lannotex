@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
-from .domain import Annotation, validate_all
+from .domain import Annotation, annotation_json, validate_all
 
 # Migration 1 matches the shipped prototype; changes are appended.
 MIGRATIONS = [
@@ -26,7 +26,13 @@ MIGRATIONS = [
      "CREATE TRIGGER image_added AFTER INSERT ON images BEGIN INSERT INTO revisions(image_id) VALUES(NEW.id); INSERT INTO team_changes(image_id) VALUES(NEW.id); END"],
     ["ALTER TABLE team_audit ADD COLUMN data TEXT NOT NULL DEFAULT '[]'",
      "ALTER TABLE team_audit ADD COLUMN negative INTEGER NOT NULL DEFAULT 0"],
-    ["ALTER TABLE drafts ADD COLUMN base_revision INTEGER"]
+    ["ALTER TABLE drafts ADD COLUMN base_revision INTEGER"],
+    # Label and kind were only readable by parsing every annotation's JSON in Python.
+    ["ALTER TABLE annotations ADD COLUMN label TEXT",
+     "ALTER TABLE annotations ADD COLUMN kind TEXT",
+     "UPDATE annotations SET label=json_extract(data,'$.label'), kind=json_extract(data,'$.kind')",
+     "CREATE INDEX IF NOT EXISTS annotations_label ON annotations(label)",
+     "ALTER TABLE drafts ADD COLUMN history TEXT"]
 ]
 
 
@@ -45,7 +51,7 @@ def atomic_text(path, text):
 
 
 class Project:
-    def __init__(self, root, create=True):
+    def __init__(self, root, create=True, migrate=True):
         self.root = Path(root).resolve()
         self.db_path = self.root / 'project.sqlite3'
         if not create and not self.db_path.is_file(): raise FileNotFoundError('No project.sqlite3 in this folder')
@@ -56,7 +62,9 @@ class Project:
             self.conn.execute('PRAGMA foreign_keys=ON')
             self.conn.execute('PRAGMA journal_mode=WAL')
             self.conn.execute('PRAGMA synchronous=FULL')
-            self._migrate()
+            # The team server migrates once at start-up; its request threads skip this so they
+            # do not serialize behind BEGIN IMMEDIATE on every request.
+            if migrate: self._migrate()
         except Exception:
             self.conn.close()
             raise
@@ -85,13 +93,9 @@ class Project:
         if not new or len(new) > 120: raise ValueError('Enter a label of 1–120 characters')
         with self.conn:
             self.conn.execute('UPDATE labels SET name=? WHERE name=?', (new, old))
-            affected=set()
-            for row in self.conn.execute('SELECT id,image_id,data FROM annotations').fetchall():
-                data = json.loads(row['data'])
-                if data['label'] == old:
-                    data['label'] = new
-                    self.conn.execute('UPDATE annotations SET data=? WHERE id=?', (json.dumps(data), row['id']))
-                    affected.add(row['image_id'])
+            affected={r[0] for r in self.conn.execute('SELECT image_id FROM annotations WHERE label=?', (old,))}
+            self.conn.execute("UPDATE annotations SET label=?, data=json_set(data,'$.label',?) WHERE label=?",
+                              (new, new, old))
             for row in self.conn.execute('SELECT image_id,data FROM drafts').fetchall():
                 data = json.loads(row['data'])
                 for a in data:
@@ -102,10 +106,14 @@ class Project:
                 self.conn.execute('INSERT INTO team_changes(image_id) VALUES(?)',(ident,))
 
     def remove_label(self, name):
-        for row in self.conn.execute('SELECT data FROM annotations UNION ALL SELECT data FROM drafts'):
-            data = json.loads(row[0])
-            if any(a['label'] == name for a in (data if isinstance(data, list) else [data])):
-                raise ValueError('This label is in use. Rename it, or relabel its annotations first.')
+        in_use = self.conn.execute('SELECT 1 FROM annotations WHERE label=? LIMIT 1', (name,)).fetchone()
+        if not in_use:
+            for row in self.conn.execute('SELECT data FROM drafts'):
+                if any(a['label'] == name for a in json.loads(row[0])):
+                    in_use = True
+                    break
+        if in_use:
+            raise ValueError('This label is in use. Rename it, or relabel its annotations first.')
         with self.conn: self.conn.execute('DELETE FROM labels WHERE name=?', (name,))
 
     def reference(self, path):
@@ -140,12 +148,18 @@ class Project:
         result = self.conn.execute(sql, args)
         return result.fetchone()[0] if count else result.fetchall()
 
+    @staticmethod
+    def _revive(data):
+        """json.loads already built fresh lists, so skip Annotation.from_dict's defensive copy."""
+        return Annotation(data['label'], data['kind'], data.get('geometry', []), data['id'])
+
     def load_annotations(self, image_id):
-        return [Annotation.from_dict(json.loads(r[0])) for r in self.conn.execute('SELECT data FROM annotations WHERE image_id=? ORDER BY rowid', (image_id,))]
+        rows = self.conn.execute('SELECT data FROM annotations WHERE image_id=? ORDER BY rowid', (image_id,))
+        return [self._revive(json.loads(r[0])) for r in rows]
 
     def load_state(self, image_id):
         draft = self.conn.execute('SELECT * FROM drafts WHERE image_id=?', (image_id,)).fetchone()
-        if draft: return [Annotation.from_dict(a) for a in json.loads(draft['data'])], bool(draft['negative']), True
+        if draft: return [self._revive(a) for a in json.loads(draft['data'])], bool(draft['negative']), True
         return self.load_annotations(image_id), self.image(image_id)['status'] == 'empty', False
 
     def load_document(self, image_id):
@@ -157,31 +171,47 @@ class Project:
             if draft and draft[0] is not None: revision=draft[0]
             return annotations,negative,recovered,revision
 
-    def save_draft(self, image_id, annotations, negative=False, base_revision=None):
-        with self.conn:
-            if base_revision is None:
-                base_revision=self.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(image_id,)).fetchone()[0]
-            self.conn.execute('INSERT INTO drafts(image_id,data,negative,base_revision) VALUES(?,?,?,?) '
-                              'ON CONFLICT(image_id) DO UPDATE SET data=excluded.data,negative=excluded.negative',
-                              (image_id, json.dumps([a.to_dict() for a in annotations]), int(negative),base_revision))
+    def save_draft(self, image_id, annotations, negative=False, base_revision=None, history=None):
+        # Drafts are written while the user edits; WAL still recovers them after a crash at
+        # NORMAL, while FULL fsyncs the whole database on every single edit.
+        self.conn.execute('PRAGMA synchronous=NORMAL')
+        try:
+            with self.conn:
+                if base_revision is None:
+                    base_revision=self.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(image_id,)).fetchone()[0]
+                self.conn.execute('INSERT INTO drafts(image_id,data,negative,base_revision,history) VALUES(?,?,?,?,?) '
+                                  'ON CONFLICT(image_id) DO UPDATE SET data=excluded.data,negative=excluded.negative,'
+                                  'history=excluded.history',
+                                  (image_id, '[' + ','.join(annotation_json(a) for a in annotations) + ']',
+                                   int(negative), base_revision,
+                                   history if isinstance(history, str) or history is None
+                                   else json.dumps(history, separators=(',', ':'))))
+        finally:
+            self.conn.execute('PRAGMA synchronous=FULL')
+
+    def load_history(self, image_id):
+        row = self.conn.execute('SELECT history FROM drafts WHERE image_id=?', (image_id,)).fetchone()
+        return json.loads(row[0]) if row and row[0] else None
 
     def save_annotations(self, image_id, annotations, negative=False, actor='Local owner', expected_revision=None, clear_draft=True):
         errors = validate_all(annotations, {r['name'] for r in self.labels()}, negative)
         if errors: raise ValueError('; '.join(errors))
-        payload = [(a.id, image_id, json.dumps(a.to_dict(), separators=(',', ':'))) for a in annotations]
+        # Serialize once: the audit row reuses the per-annotation JSON instead of rebuilding it.
+        payload = [(a.id, image_id, annotation_json(a), a.label, a.kind) for a in annotations]
+        audit = '[' + ','.join(row[2] for row in payload) + ']'
         with self.conn:
             self.conn.execute('BEGIN IMMEDIATE')
             current=self.conn.execute('SELECT revision FROM revisions WHERE image_id=?',(image_id,)).fetchone()
             if current is None: raise ValueError('Image does not exist')
             if expected_revision is not None and current[0]!=expected_revision: raise ConflictError('Another reviewer saved this image. Reload or resolve the conflict before saving.')
             self.conn.execute('DELETE FROM annotations WHERE image_id=?', (image_id,))
-            self.conn.executemany('INSERT INTO annotations VALUES(?,?,?)', payload)
+            self.conn.executemany('INSERT INTO annotations(id,image_id,data,label,kind) VALUES(?,?,?,?,?)', payload)
             self.conn.execute('UPDATE images SET status=? WHERE id=?', ('empty' if negative else 'done' if annotations else 'new', image_id))
             if clear_draft: self.conn.execute('DELETE FROM drafts WHERE image_id=?', (image_id,))
             self.conn.execute('UPDATE revisions SET revision=revision+1 WHERE image_id=?',(image_id,))
             self.conn.execute('INSERT INTO team_changes(image_id) VALUES(?)',(image_id,))
             self.conn.execute('INSERT INTO team_audit(image_id,member,revision,data,negative) VALUES(?,?,?,?,?)',
-                              (image_id,actor,current[0]+1,json.dumps([a.to_dict() for a in annotations]),int(negative)))
+                              (image_id,actor,current[0]+1,audit,int(negative)))
             if self.setting('team_remote'):
                 self.conn.execute('UPDATE team_links SET dirty=1 WHERE image_id=?',(image_id,))
 

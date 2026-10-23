@@ -28,6 +28,7 @@ from .home import Home, CreateProjectDialog, PIPELINES
 from .team import TeamClient, TeamServer, add_member, sync_replica, resolve_conflict
 
 COLORS = ['#37b8a5','#70a8f5','#d5a85a','#bf8bef','#ed8ca4','#74c9db','#9fbd68']
+DRAFT_DEBOUNCE_MS = 250
 DEFAULT_KEYS = {'save':'Ctrl+S','save_next':'Ctrl+Return','previous':'Alt+Left','next':'Alt+Right',
                 'undo':'Ctrl+Z','redo':'Ctrl+Shift+Z','delete':'Del','cancel':'Esc','finish':'Return',
                 'fit':'F','select':'V','box':'B','polygon':'P','duplicate':'Ctrl+D','redraw':'R',
@@ -68,6 +69,7 @@ class Main(QMainWindow):
         self.loader.detail_ready.connect(self.detail_ready); self.loader.detail_failed.connect(self.detail_failed)
         self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.save)
         self.filter_timer = QTimer(self); self.filter_timer.setSingleShot(True); self.filter_timer.timeout.connect(self.filter_images)
+        self.draft_timer = QTimer(self); self.draft_timer.setSingleShot(True); self.draft_timer.timeout.connect(self.flush_draft)
         self.actions = {}; self._build_ui(); self._build_menus()
         self.workspace=self.takeCentralWidget(); self.workspace.setObjectName('workspace')
         self.home=Home(); self.pages=QStackedWidget(); self.pages.addWidget(self.home); self.pages.addWidget(self.workspace)
@@ -392,6 +394,7 @@ class Main(QMainWindow):
         self.canvas.cancel(); self.timer.stop(); self.token+=1; self.current=dict(record)
         annotations,negative,recovered,revision=self.project.load_document(record['id'])
         self.document=Document(annotations,negative); self.dirty=recovered; self.loading=True
+        if recovered: self.document.restore_history(self.project.load_history(record['id']))
         self.current_revision=revision
         self.canvas.empty_title='Loading image…'; self.canvas.empty_detail=Path(record['path']).name
         self.canvas.set_image(None); self.canvas.set_annotations(annotations)
@@ -470,7 +473,7 @@ class Main(QMainWindow):
         if self.canvas.points or (self.canvas.drag and self.canvas.drag['kind']!='pan'):
             self.notice('Finish or cancel the current drawing before saving or leaving this image.'); return False
         if not self.project or not self.current or not self.dirty: return True
-        self.timer.stop(); self.set_save_state('Saving…')
+        self.timer.stop(); self.draft_timer.stop(); self.set_save_state('Saving…')
         try:
             self.project.save_annotations(self.current['id'],self.document.annotations,self.document.negative,
                                           expected_revision=self.current_revision)
@@ -494,10 +497,19 @@ class Main(QMainWindow):
         self.dirty=True
         self.canvas.set_annotations(self.document.annotations)
         self.sync_inspector(); self.refresh_controls(); self.set_save_state('Unsaved')
-        try: self.project.save_draft(self.current['id'],self.document.annotations,self.document.negative,self.current_revision)
+        # Coalesce rapid edits: one draft write per 250 ms instead of one per mouse move.
+        self.draft_timer.start(DRAFT_DEBOUNCE_MS)
+        if self.settings.value('autosave',True,type=bool): self.timer.start(700)
+
+    def flush_draft(self):
+        """Persist the recovery draft and the undo history. Safe to call when nothing is pending."""
+        self.draft_timer.stop()
+        if not self.project or not self.current or not self.dirty: return
+        try:
+            self.project.save_draft(self.current['id'],self.document.annotations,self.document.negative,
+                                    self.current_revision,self.document.history_json())
         except Exception as error:
             self.set_save_state('Draft write failed'); self.notice(f'Keep this window open: {error}')
-        if self.settings.value('autosave',True,type=bool): self.timer.start(700)
 
     def undo(self):
         if not self.current or self.loading: return

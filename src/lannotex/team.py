@@ -46,6 +46,10 @@ class TeamServer(ThreadingHTTPServer):
             self.socket=context.wrap_socket(self.socket,server_side=True)
         self.thread=None
 
+    def project(self):
+        """A connection for one request. Migrations already ran at start-up, so this takes no lock."""
+        return Project(self.root,create=False,migrate=False)
+
     def start(self):
         self.thread=threading.Thread(target=self.serve_forever,daemon=True); self.thread.start(); return self
 
@@ -70,7 +74,7 @@ class TeamHandler(BaseHTTPRequestHandler):
         project=None
         try:
             self.connection.settimeout(15)
-            project=Project(self.server.root,create=False)
+            project=self.server.project()
             token=self.headers.get('Authorization','').removeprefix('Bearer ')
             member=project.conn.execute('SELECT * FROM team_members WHERE token_hash=? AND active=1',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
             if not member: self.reply(401,{'error':'Invalid or revoked reviewer token'}); return
@@ -217,7 +221,8 @@ def sync_replica(root,client,cancel,progress):
                         continue
                     local.conn.execute('INSERT OR IGNORE INTO images(id,path,width,height,status) VALUES(?,?,?,?,?)',(ident,ref,remote['width'],remote['height'],state['status']))
                     local.conn.execute('DELETE FROM annotations WHERE image_id=?',(ident,))
-                    local.conn.executemany('INSERT INTO annotations VALUES(?,?,?)',[(a.id,ident,json.dumps(a.to_dict())) for a in annotations])
+                    local.conn.executemany('INSERT INTO annotations(id,image_id,data,label,kind) VALUES(?,?,?,?,?)',
+                                           [(a.id,ident,json.dumps(a.to_dict()),a.label,a.kind) for a in annotations])
                     local.conn.execute('UPDATE images SET status=? WHERE id=?',(state['status'],ident))
                     local.conn.execute('UPDATE revisions SET revision=revision+1 WHERE image_id=?',(ident,))
                     local.conn.execute('INSERT OR REPLACE INTO team_links VALUES(?,?,0,0)',(ident,state['revision']))
@@ -239,7 +244,8 @@ def resolve_conflict(root,ident,client,keep_local):
             state=client.request(f'/state/{ident}',{'revision':state['revision'],'annotations':[a.to_dict() for a in anns],'negative':negative})
         with local.conn:
             local.conn.execute('DELETE FROM annotations WHERE image_id=?',(ident,))
-            local.conn.executemany('INSERT INTO annotations VALUES(?,?,?)',[(a['id'],ident,json.dumps(a)) for a in state['annotations']])
+            local.conn.executemany('INSERT INTO annotations(id,image_id,data,label,kind) VALUES(?,?,?,?,?)',
+                                   [(a['id'],ident,json.dumps(a),a['label'],a['kind']) for a in state['annotations']])
             local.conn.execute('DELETE FROM drafts WHERE image_id=?',(ident,))
             local.conn.execute('UPDATE images SET status=? WHERE id=?',(state['status'],ident))
             local.conn.execute('UPDATE revisions SET revision=revision+1 WHERE image_id=?',(ident,))

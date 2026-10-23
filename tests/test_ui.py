@@ -255,6 +255,19 @@ def test_number_keys_toggle_classes_in_classification_projects(window,qt,tmp_pat
     QTest.keyClick(w.canvas,Qt.Key_2); assert w.document.annotations==[]
 
 
+def test_draft_writes_are_debounced(window,qt,tmp_path):
+    w=window; open_ready(w,qt,project(tmp_path)); w.timer.stop()
+    drafts=lambda:w.project.conn.execute('SELECT COUNT(*) FROM drafts').fetchone()[0]
+    w.commit([Annotation('cat','box',[.1,.1,.4,.4])])
+    assert w.draft_timer.isActive() and drafts()==0, 'an edit must not write the draft synchronously'
+    w.commit([Annotation('cat','box',[.2,.2,.5,.5])])
+    assert drafts()==0
+    w.flush_draft()
+    assert not w.draft_timer.isActive() and drafts()==1
+    assert w.project.load_history(w.current['id'])['undo']
+    w.timer.stop(); assert w.save() and drafts()==0
+
+
 def test_detail_decode_respects_pixel_limit(tmp_path):
     from lannotex.workers import decode, decode_full
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)

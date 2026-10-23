@@ -6,6 +6,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Dense images are no longer slow to edit.** A 200-shape image used to freeze for about six
+  seconds on every mouse release; the same edit now takes 0.2 ms. Moving a shape is 563×
+  faster, undo 923×, saving 361×, and validating the document 42,000×. Measurements, method
+  and the remaining costs are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+  - Polygon self-intersection sweeps the x axis instead of testing every pair of edges.
+  - Validation results and annotation JSON are reused for shapes that did not change.
+  - Undo records what changed rather than copying the whole document.
+  - The canvas reuses screen polygons and skips shapes outside the view or the click.
+- **Undo history survives a crash.** It is written alongside the recovery draft, so reopening a
+  project with unsaved work restores the undo stack too.
+- **Recovery drafts are written at most once every 250 ms** instead of on every edit, and on
+  navigation, save and close. They remain crash-safe: a test kills the process mid-edit and
+  reopens the draft.
+- Team hosting no longer re-runs schema migrations, under an exclusive lock, on every request.
+
+### Added
+
+- `scripts/bench/interaction.py` measures interaction latency and fails CI when the p95 for an
+  edit exceeds 16 ms or a draft write exceeds 50 ms.
+- Property-based tests (hypothesis) assert the fast self-intersection sweep always agrees with
+  the original pairwise implementation, which is kept as `polygon_self_intersects_pairwise`.
+
+### Migrations
+
+- **6** adds indexed `label` and `kind` columns to `annotations`, backfilled from existing JSON,
+  and a `history` column to `drafts`. Renaming or removing a label is now a single SQL
+  statement. Projects from 0.2.0 upgrade on open; a test covers that path.
+
 ## [0.2.0] — 2026-10-14
 
 Viewing, speed and layout: sharp zoom on large images, instant navigation, and a
