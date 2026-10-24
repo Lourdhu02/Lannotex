@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-24
+
+A workspace you can actually work in on a laptop, and a window that closes when you ask it to.
+
 ### Changed
 
 - **The workspace was rebuilt around what you actually use.** The right-hand panel crammed
