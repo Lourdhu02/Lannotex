@@ -1,5 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
+import re
+import sys
 
+VERSION = re.search(r'__version__ = "([^"]+)"', open('src/lannotex/__init__.py').read()).group(1)
+
+# Windows wants .ico, macOS wants .icns; Linux takes the window icon the app sets itself.
+ICON = {'win32': 'assets/Lannotex.ico', 'darwin': 'assets/Lannotex.icns'}.get(sys.platform)
 
 a = Analysis(
     ['run_lannotex.py'],
@@ -22,6 +28,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='Lannotex',
+    icon=ICON,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -42,3 +49,15 @@ coll = COLLECT(
     upx_exclude=[],
     name='Lannotex',
 )
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        coll,
+        name='Lannotex.app',
+        icon=ICON,
+        bundle_identifier='io.github.lourdhu02.lannotex',
+        info_plist={
+            'CFBundleDisplayName': 'Lannotex',
+            'CFBundleShortVersionString': VERSION,
+            'NSHighResolutionCapable': True,
+        },
+    )

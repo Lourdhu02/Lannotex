@@ -44,9 +44,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: Compress-Archive -Path dist\Lannotex -DestinationPath Lannotex-Windows.zip
-      - name: Archive binary (tar.gz on macOS / Linux)
-        if: runner.os != 'Windows'
-        run: tar -czf Lannotex-${{ runner.os }}.tar.gz -C dist Lannotex
+      - name: Archive binary (tar.gz on macOS)
+        if: runner.os == 'macOS'
+        run: tar -czf Lannotex-macOS.tar.gz -C dist Lannotex.app
+      - name: Archive binary (tar.gz on Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf Lannotex-Linux.tar.gz -C dist Lannotex
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
