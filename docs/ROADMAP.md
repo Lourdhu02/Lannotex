@@ -1,42 +1,69 @@
 # Roadmap
 
-This document captures work beyond the current desktop refresh. Home, pipeline
-presets, monochrome themes, background imports, editable polygons, analysis,
-backup/restore/relink, and optional team synchronization are implemented. Their
-tested scope is documented in VERIFICATION.md.
+What Lannotex is aiming at, what is done, and what is deliberately out of scope. Dates are not
+promised; order is.
 
-## v0.1 — dataset-scale reliability
+**The goal:** the fastest, most reliable native labelling tool, that runs AI locally and opens
+images of any size. No account, no subscription, MIT.
 
-- **Dataset validation and thumbnail strip** — measure real 10 GB datasets;
-  add lazily generated thumbnails to the paged list.
-- **Tiled, full-resolution zoom** — avoid full-size transient decode memory and
-  preview-resolution limits on extremely large images.
-- **Project archive / restore / relink UI** — one-click archive of images +
-  annotations, and bulk re-linking of moved folders.
-- **Undo/redo across navigation** — persist the undo stack with drafts so
-  history survives image switches and restarts.
+## Done
 
-## v0.2 — export & automation
+| | |
+| --- | --- |
+| **Instant editing** | Validation, undo and saving no longer scale with document size. A dense image went from a six-second freeze per edit to 0.2 ms. CI enforces a 16 ms budget. |
+| **Any image size** | Disk-cached tile pyramids. A 900 MP TIFF reopens in 0.1 s and pans using under 200 MB. |
+| **Formats** | Export to Labelme, YOLO boxes and segments, Pascal VOC, COCO, CSV and native JSONL, with a reproducible train/val/test split. Import LabelMe, COCO, YOLO and VOC. |
+| **Crash safety** | Recovery drafts, transactional saves, and undo history that survives a kill. |
+| **Teams** | Optional LAN host, per-reviewer tokens, background sync, explicit conflict resolution, audit history. |
+| **Reach** | PyPI, standalone builds for Windows, macOS and Linux, and a headless CLI for CI. |
 
-- **Export wizard** with format previews and per-format options.
-- **Team assignments and independent review** — optional work allocation,
-  review roles, and a visual saved-version comparison screen.
-- **Network soak tests** — real multi-computer LAN, host sleep, reconnect, TLS,
-  and high-volume conflicts.
-- **Python API documentation** for `domain`, `storage`, and `exporters` so
-  Lannotex can be embedded in training pipelines.
+## Next
 
-## v0.3 — distribution & ecosystem
+### Streaming decode
 
-- **Microsoft Store packaging** (MSIX, explicit capability review for optional team hosting).
-- **Auto-update channel** for standalone binaries.
-- **npm companion CLI** *(optional)* — a thin JS/TS shim that downloads the
-  prebuilt binary for each platform, for teams that standardize on Node tooling.
-- **Plugin hooks** for custom export formats and label sources.
+Opening a 900 MP image for the *first* time still costs about 2.8 s and several GB, because
+Pillow cannot decode part of a TIFF. Reading native tiles in a compiled core fixes cold opens
+and peak memory, and brings in the runtime the AI work needs. Measured alternatives and why
+they were rejected are in [Performance](PERFORMANCE.md).
+
+### More shapes
+
+Rotated boxes, points, polylines, keypoints with skeletons, and brush masks. Per-object
+attributes — a schema per label, enforced at save. These are what most LabelMe and CVAT users
+ask for first.
+
+### AI assist, on your machine
+
+Click-to-polygon with SAM, and pre-labelling with your own YOLO `.onnx`, as proposals you
+accept or reject. Shipped as an optional extra so the base install stays small. Models are
+downloaded only when you ask, verified by checksum, and run locally. No third-party service,
+ever.
+
+### Dataset health
+
+Label distribution, tiny and huge outliers, duplicate and near-duplicate images, overlapping
+shapes, and missing required attributes — in the Analysis panel and as
+`lannotex validate --strict` for CI.
+
+### Shipping like software
+
+An MSIX package and a Microsoft Store listing, winget, a Flathub manifest, and a notarized
+macOS build. Signed, so no warnings.
+
+## Later
+
+Video: frames, tracks and interpolation. Active learning, to put the most useful unlabelled
+image in front of you next. Review roles, inter-annotator agreement and a visual version diff
+for teams.
+
+## Not planned
+
+A hosted cloud service, accounts or billing. Text, audio, 3D or DICOM annotation. Enterprise
+SSO. These are good products; they are not this one.
 
 ## Principles
 
-- Local projects and exports remain fully usable without any entitlement or
-  cloud service; paid/future desktop features, if any, must be strictly optional.
-- Image data is never altered; annotation geometry stays normalized so it
-  survives resolution changes.
+- Local projects and exports stay fully usable with no account, licence key or network.
+- Source images are never altered, and geometry stays normalized so it survives everything.
+- No telemetry, and no network traffic you did not ask for.
+- Every performance claim ships with a script and a number.

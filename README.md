@@ -4,8 +4,8 @@
 
 # Lannotex
 
-**Fast, offline-first image annotation for bounding boxes, polygons, and image classes.**<br>
-Free and MIT-licensed. LabelMe-compatible. Your images never leave your machine.
+**Label images for AI, on your own machine.**<br>
+Boxes, polygons and classes. Any image size. No account, no telemetry, MIT.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Lourdhu02/Lannotex/ci.yml?branch=main&label=tests)](https://github.com/Lourdhu02/Lannotex/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/github/actions/workflow/status/Lourdhu02/Lannotex/docs.yml?branch=main&label=docs)](https://lourdhu02.github.io/Lannotex/)
@@ -16,6 +16,7 @@ Free and MIT-licensed. LabelMe-compatible. Your images never leave your machine.
 [**Documentation**](https://lourdhu02.github.io/Lannotex/) ·
 [Quick start](https://lourdhu02.github.io/Lannotex/getting-started/quickstart/) ·
 [Coming from LabelMe](https://lourdhu02.github.io/Lannotex/migrate-from-labelme/) ·
+[Troubleshooting](https://lourdhu02.github.io/Lannotex/guide/troubleshooting/) ·
 [Releases](https://github.com/Lourdhu02/Lannotex/releases)
 
 <img src="https://raw.githubusercontent.com/Lourdhu02/Lannotex/main/docs/assets/demo.gif" width="860" alt="Drawing two boxes and a polygon on a cat photo in Lannotex, then saving and moving to the next image">
@@ -24,10 +25,11 @@ Free and MIT-licensed. LabelMe-compatible. Your images never leave your machine.
 
 ## Why Lannotex?
 
-- **Everything you need is free.** YOLO, COCO, Labelme and CSV export, standalone desktop builds, and team review are all free and open source. No license keys, no Pro tier.
-- **Built for real datasets.** A project is one SQLite file instead of thousands of JSON files. The image list is virtualized, so its memory use stays flat; it was [benchmarked](https://lourdhu02.github.io/Lannotex/PERFORMANCE/) at 100,000 records. Your source images are never moved or modified.
-- **You can't lose work.** Every edit is written to a recovery draft, saves are transactional, and broken geometry (self-intersecting polygons, zero-size boxes) is rejected before it reaches your dataset.
-- **Private by default.** No account, no telemetry, no cloud. The app makes network requests only if you choose to host or join a team on your own network.
+- **It stays quick on dense images.** Editing costs the shape you touched, not the size of the document. An image with 200 shapes used to freeze for six seconds on every mouse release; the same edit now takes **0.2 ms**. CI fails the build if an edit ever exceeds 16 ms.
+- **Image size stops mattering.** Zooming past the preview builds a tile pyramid once and caches it. A **900 MP** TIFF reopens in **0.1 s** and pans using **under 200 MB** — decoding it whole would need 2.7 GB. ([measurements](https://lourdhu02.github.io/Lannotex/PERFORMANCE/))
+- **You can't lose work.** Every edit is written to a recovery draft within 250 ms, saves are transactional, and undo history survives a crash. Self-intersecting polygons and zero-area boxes are refused before they reach your dataset.
+- **Everything you need is free.** Every export format, the desktop builds and team review are all MIT. No licence keys, no Pro tier.
+- **Private by default.** No account, no telemetry, no cloud. It makes network requests only if you choose to host or join a team on your own network.
 
 ## Install
 
@@ -88,10 +90,10 @@ Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.git
 
 | | |
 | --- | --- |
-| **Annotate** | Bounding boxes · polygons with vertex drag, insert, and delete · multi-label image classes · "no target" negatives · 100-step undo/redo · zoom under the pointer, pan, arrow-key nudging · focus mode · light and dark themes |
+| **Annotate** | Bounding boxes · polygons with vertex drag, insert, and delete · multi-label image classes · "no target" negatives · 100-step undo/redo · number keys 1–9 to pick a label · zoom under the pointer, pan, arrow-key nudging · focus mode · light and dark themes |
 | **View** | Any image size: a 900 MP TIFF reopens in 0.1 s and pans at ~100 fps from a cached tile pyramid, using under 200 MB · sharp full-resolution zoom to 6400% · next/previous images decoded ahead · minimap · pixel grid · brightness, contrast and gamma · thumbnails · dockable panels you can float onto a second monitor, with saved layouts · `Ctrl+K` command palette |
-| **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
-| **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
+| **Stay safe** | SQLite projects with versioned migrations · recovery drafts written every 250 ms · undo history that survives a crash · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
+| **Scale** | Edits cost the shape you touched, not the document: 0.2 ms on a 200-shape image, gated at 16 ms in CI · virtualized image list (at most 1,024 records in memory) · background import, decoding and tiling · coordinates normalized to the original resolution |
 | **Export** | Labelme JSON · ready-to-train YOLO boxes and segments with a reproducible train/val/test split · Pascal VOC · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
 | **Import** | COCO · YOLO (boxes and segments) · Pascal VOC · LabelMe · native JSONL, detected from what you point at |
 | **Automate** | `lannotex export`, `lannotex import` and `lannotex analyze` run headless in CI, with no display needed |

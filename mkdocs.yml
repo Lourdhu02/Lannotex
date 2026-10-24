@@ -70,10 +70,11 @@ nav:
       - Projects & safety: guide/projects.md
       - Import & export: guide/import-export.md
       - Team projects: TEAM.md
+      - Troubleshooting: guide/troubleshooting.md
   - Coming from LabelMe: migrate-from-labelme.md
   - Command line: cli.md
-  - Project:
-      - Roadmap: ROADMAP.md
+  - Reference:
+      - Architecture: reference/architecture.md
       - Performance: PERFORMANCE.md
-      - Verification: VERIFICATION.md
-      - Microsoft Store: MICROSOFT_STORE.md
+      - Roadmap: ROADMAP.md
+      - Packaging for the Microsoft Store: MICROSOFT_STORE.md
