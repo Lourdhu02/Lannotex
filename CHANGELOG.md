@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-24
+
+Editing a dense image no longer freezes, images of any size open, and datasets move in and
+out of other tools correctly.
+
 ### Fixed
 
 - **COCO exports were not loadable.** `file_name` held the absolute path of the original image
