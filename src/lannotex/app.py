@@ -64,7 +64,7 @@ class Main(QMainWindow):
         apply_theme(QApplication.instance(),self.dark)
         self.project = None; self.current = None; self.document = Document()
         self.dirty = False; self.loading = False; self.guard = False; self.token = 0
-        self.job = None; self.job_kind = ''; self.focus_mode = False
+        self.job = None; self.job_kind = ''; self.focus_mode = False; self.closing = False
         self.pool = QThreadPool(self); self.pool.setMaxThreadCount(1)
         self.loader = ImageLoader(self)
         self.thumbnails = Thumbnails(self); self.thumbnails.prune_later()
@@ -1106,17 +1106,31 @@ class Main(QMainWindow):
         buttons.accepted.connect(accept); buttons.rejected.connect(dialog.reject); dialog.exec()
 
     def closeEvent(self,event):
-        if self.sync_job:
-            self.sync_job.cancel.set(); self.notice('Waiting for the current team request to finish.'); event.ignore(); return
-        if self.job:
-            self.cancel_job(); self.loader.stop()
-            self.notice('Finishing the active file operation. Close again when it has stopped.'); event.ignore(); return
-        self.loader.stop(); self.thumbnails.pool.clear(); self.thumbnails.pool.waitForDone(3000)
-        self.cancel_tiles(); self.tile_pool.clear(); self.tile_pool.waitForDone(5000)
+        """Cancel background work, then save. Closing should never need a second click.
+
+        Only two things keep the window open: a background task that will not stop, and a save
+        that actually failed. Both would otherwise lose the user's annotations.
+        """
+        if self.closing: event.ignore(); return
+        self.closing=True
+        self.timer.stop(); self.draft_timer.stop(); self.sync_timer.stop()
+        for job in (self.job,self.sync_job):
+            if job: job.cancel.set()
+        self.cancel_tiles(); self.loader.stop()
+        for pool,limit in ((self.thumbnails.pool,3000),(self.tile_pool,5000),(self.pool,8000)):
+            pool.clear()
+            if not pool.waitForDone(limit):
+                self.closing=False
+                self.notice('Still finishing a background operation. Close again to retry.')
+                event.ignore(); return
+        self.job=None; self.job_kind=''; self.sync_job=None
+        # An unfinished polygon is scratch work, never part of the document, so it is dropped
+        # rather than blocking the save the way it blocks navigation.
+        self.canvas.cancel()
         if not self.save():
+            self.closing=False
             self.fail('Cannot close safely','Saving failed. Your edits remain in this window. Resolve disk space or permissions and try Save again.'); event.ignore(); return
         self.settings.setValue('geometry',self.saveGeometry()); self.settings.setValue('layout',self.pre_focus if self.focus_mode else self.dock_host.saveState())
-        self.sync_timer.stop()
         if self.host: self.host.stop(); self.host=None
         if self.project: self.project.close(); self.project=None
         QApplication.instance().removeEventFilter(self); event.accept()

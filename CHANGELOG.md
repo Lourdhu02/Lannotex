@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Closing the window took two attempts.** A background job, a team sync, or even an
+  unfinished polygon would each refuse the first close and ask you to try again. Closing now
+  cancels background work, waits for it, discards the unfinished drawing and saves, so it
+  closes the first time. The window still stays open in the two cases where leaving would lose
+  annotations: a task that will not stop, and a save that actually failed.
+
 ## [0.3.0] — 2026-10-24
 
 Editing a dense image no longer freezes, images of any size open, and datasets move in and

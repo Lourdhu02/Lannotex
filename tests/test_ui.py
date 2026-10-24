@@ -273,6 +273,33 @@ def test_draft_writes_are_debounced(window,qt,tmp_path):
     w.timer.stop(); assert w.save() and drafts()==0
 
 
+def test_closing_cancels_work_and_accepts_the_first_time(window,qt,tmp_path):
+    import threading
+    from PySide6.QtGui import QCloseEvent
+    w=window; open_ready(w,qt,project(tmp_path)); w.timer.stop()
+
+    running=threading.Event()
+    def slow(cancel,progress):
+        running.set()
+        for _ in range(200):
+            if cancel.is_set(): return 'cancelled'
+            time.sleep(.01)
+        return 'finished'
+    w.start_job('backup',slow)
+    wait_for(qt,running.is_set)
+
+    w.commit([Annotation('cat','box',[.1,.1,.4,.4])])
+    w.set_tool('polygon'); w.canvas.points=[[.1,.1],[.2,.2]]   # an unfinished drawing used to block closing
+    assert not w.save(), 'an in-progress drawing still blocks an ordinary save'
+
+    event=QCloseEvent(); w.closeEvent(event)
+    assert event.isAccepted(), 'closing must not require a second attempt'
+    assert w.job is None and w.project is None
+
+    again=QCloseEvent(); w.closeEvent(again)
+    assert not again.isAccepted(), 'a second close while shutting down is ignored'
+
+
 def test_preview_decode_is_capped(tmp_path):
     from lannotex.workers import decode
     path=tmp_path/'big.png'; Image.new('RGB',(3000,2000)).save(path)
