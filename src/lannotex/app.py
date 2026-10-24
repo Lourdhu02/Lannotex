@@ -30,6 +30,7 @@ from .team import TeamClient, TeamServer, add_member, sync_replica, resolve_conf
 
 COLORS = ['#37b8a5','#70a8f5','#d5a85a','#bf8bef','#ed8ca4','#74c9db','#9fbd68']
 DRAFT_DEBOUNCE_MS = 250
+_PRUNED = False
 DEFAULT_KEYS = {'save':'Ctrl+S','save_next':'Ctrl+Return','previous':'Alt+Left','next':'Alt+Right',
                 'undo':'Ctrl+Z','redo':'Ctrl+Shift+Z','delete':'Del','cancel':'Esc','finish':'Return',
                 'fit':'F','select':'V','box':'B','polygon':'P','duplicate':'Ctrl+D','redraw':'R',
@@ -69,7 +70,11 @@ class Main(QMainWindow):
         self.loader.ready.connect(self.image_ready); self.loader.failed.connect(self.image_failed)
         self.tile_pool = QThreadPool(self); self.tile_pool.setMaxThreadCount(1); self.tile_job = None
         self.tile_cache_root = tile_cache_dir()
-        self.tile_pool.start(Job(lambda cancel,progress: prune_tiles(self.tile_cache_root)))
+        global _PRUNED
+        if not _PRUNED:
+            # Housekeeping, once per process and behind any real work on this pool.
+            _PRUNED = True
+            self.tile_pool.start(Job(lambda cancel,progress: prune_tiles(self.tile_cache_root)), -1)
         self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.save)
         self.filter_timer = QTimer(self); self.filter_timer.setSingleShot(True); self.filter_timer.timeout.connect(self.filter_images)
         self.draft_timer = QTimer(self); self.draft_timer.setSingleShot(True); self.draft_timer.timeout.connect(self.flush_draft)
@@ -458,7 +463,7 @@ class Main(QMainWindow):
         job.events.error.connect(self.tiles_error)
         job.events.finished.connect(self.tiles_finished)
         self.tile_job=job
-        self.tile_pool.start(job)
+        self.tile_pool.start(job, 1)
 
     @Slot(int,str)
     def tiles_progress(self,value,message):

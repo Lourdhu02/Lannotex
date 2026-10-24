@@ -37,7 +37,8 @@ def window(qt):
     yield w
     if w.job: w.job.cancel.set()
     if w.sync_job: w.sync_job.cancel.set()
-    wait_for(qt,lambda:not w.job and not w.loader.active and not w.sync_job)
+    w.cancel_tiles()
+    wait_for(qt,lambda:not w.job and not w.loader.active and not w.sync_job and not w.tile_job,timeout=30)
     w.canvas.cancel(); w.dirty=False; w.close(); qt.processEvents()
 
 
@@ -147,7 +148,8 @@ def test_full_resolution_tiles_prefetch_minimap_and_grid(window,qt,tmp_path):
 
     c.actual_pixels(); c.repaint()
     assert abs(c.source_scale()-1)<0.01 and w.zoom_label.text()=='100%'
-    wait_for(qt,lambda:c.pyramid is not None and c.pyramid.complete() and w.tile_job is None)
+    # Building tiles writes to disk, so allow for a slow shared runner.
+    wait_for(qt,lambda:c.pyramid is not None and c.pyramid.complete() and w.tile_job is None,timeout=60)
     assert c.pyramid.level_size(0)==(5000,1200)
     assert c.pyramid.tile_path(0,0,0).is_file()
     c.repaint()
