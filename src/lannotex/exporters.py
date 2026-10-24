@@ -303,57 +303,6 @@ def export_project(root, destination, format_name, cancel, progress, split=False
         project.conn.rollback(); project.close()
 
 
-def import_annotations(root, source, cancel, progress):
-    """Native JSONL or Labelme; existing labeled images are never overwritten."""
-    from PIL import Image
-    project = Project(root,create=False)
-    source = Path(source)
-    count,errors,skipped = 0,[],Counter()
-    def note(where, error):
-        if len(errors)<100: errors.append(f'{where}: {error}')
-    try:
-        def records():
-            if source.suffix=='.jsonl':
-                with source.open(encoding='utf-8') as stream:
-                    for number,line in enumerate(stream,1):
-                        try:
-                            record=json.loads(line)
-                            yield record['image']['file_name'], record['image']['width'], record['image']['height'], [Annotation.from_dict(a) for a in record['annotations']], record['status']=='empty'
-                        except Exception as e: note(f'{source.name} line {number}', e)
-            else:
-                # One malformed file must not abort the rest of the folder.
-                files = sorted(source.rglob('*.json')) if source.is_dir() else [source]
-                for file in files:
-                    if cancel.is_set(): return
-                    try:
-                        data = json.loads(file.read_text(encoding='utf-8'))
-                        if not isinstance(data, dict) or 'shapes' not in data: continue
-                        anns,neg = parse_labelme(data, skipped)
-                        yield str((file.parent/data['imagePath']).resolve()),data['imageWidth'],data['imageHeight'],anns,neg
-                    except Exception as e: note(file, e)
-        for path,w,h,annotations,negative in records():
-            if cancel.is_set(): break
-            try:
-                with Image.open(path) as image:
-                    size=image.size
-                    if image.getexif().get(274,1) in (5,6,7,8): size=size[::-1]
-                    if size != (w,h): raise ValueError('Source dimensions differ from annotation metadata')
-                errors_found=validate_all(annotations,{a.label for a in annotations},negative)
-                if errors_found: raise ValueError('; '.join(errors_found))
-                reference=project.reference(path)
-                existing=project.conn.execute('SELECT * FROM images WHERE path=?',(reference,)).fetchone()
-                if existing and (existing['status']!='new' or project.conn.execute('SELECT 1 FROM drafts WHERE image_id=?',(existing['id'],)).fetchone()):
-                    raise ValueError('Image already has annotations or a draft; skipped')
-                for label in {a.label for a in annotations}:
-                    if label not in {r['name'] for r in project.labels()}: project.add_label(label)
-                ident=project.add_image(path,w,h)
-                project.save_annotations(ident,annotations,negative)
-                count+=1; progress(count,f'Imported annotations for {count} images')
-            except Exception as e: note(path, e)
-        return {'added':count,'errors':errors,'cancelled':cancel.is_set(),'skipped_shapes':dict(skipped)}
-    finally: project.close()
-
-
 def analyze(root, cancel, progress):
     project=Project(root,create=False)
     result={'total':0,'labeled':0,'unlabeled':0,'negative':0,'boxes':0,'polygons':0,'classes':0,'distribution':{},'problems':[]}

@@ -10,7 +10,7 @@ from lannotex.storage import Project
 def test_parser_exposes_expected_commands():
     parser = build_parser()
     commands = sorted(parser._subparsers._group_actions[0].choices)
-    assert commands == ["analyze", "export", "gui", "host", "invite", "new"]
+    assert commands == ["analyze", "export", "gui", "host", "import", "invite", "new"]
 
 
 def test_version_flag_exits_zero():

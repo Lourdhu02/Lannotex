@@ -18,6 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Import COCO, YOLO and Pascal VOC datasets**, alongside LabelMe and native JSONL. The format
+  is detected from what you point at, in the app and from `lannotex import`. Round-trip tests
+  export each format and read it back. Shapes that cannot be represented, such as COCO RLE
+  masks, are counted and reported rather than failing the file.
 - **Pascal VOC and YOLO segments export.** VOC writes `Annotations/`, `JPEGImages/` and
   `ImageSets/Main/`; polygons are written as their bounding box, since VOC has no polygon.
 - **Images of any size.** Zooming past the preview now builds a tile pyramid once, caches it on

@@ -11,6 +11,7 @@ lannotex [--version] <command> [options]
 | --- | --- |
 | *(none)* / `gui` | Launch the desktop app |
 | `new` | Create an empty project |
+| `import` | Import LabelMe, COCO, YOLO, VOC or native JSONL into a project |
 | `analyze` | Validate a project and print a JSON report |
 | `export` | Export a project to a folder |
 | `invite` | Create a reviewer token for a team project |
@@ -25,6 +26,17 @@ lannotex new ./my-dataset
 ```
 
 Creates `my-dataset/project.sqlite3`. The folder is created if needed.
+
+## `lannotex import`
+
+```bash
+lannotex import ./my-dataset ./coco/instances.json
+lannotex import ./my-dataset ./yolo-dataset --format yolo
+```
+
+The format is detected from the file or folder; `--format` takes `auto` (default), `labelme`,
+`coco`, `yolo`, `voc` or `native`. Images that already carry annotations are never overwritten.
+Skipped shapes and per-file errors go to stderr.
 
 ## `lannotex analyze`
 

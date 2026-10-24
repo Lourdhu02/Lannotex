@@ -77,10 +77,29 @@ yolo detect train data=Lannotex-export-1a2b3c4d/data.yaml model=yolo11n.pt
 
 ## Importing annotations
 
-**Project → Import annotations…** accepts:
+**Project → Import annotations…** and **Import LabelMe folder…** accept any of these, and
+work out which one you gave them:
 
-- a **Labelme JSON** file, or a folder of them (top level only), and
-- a **native JSONL** export.
+| Give it | Recognised by |
+| --- | --- |
+| **LabelMe** `.json` file or folder | `shapes` in the file |
+| **COCO** `.json` | `images`, `annotations` and `categories` |
+| **YOLO** dataset folder | a `data.yaml`, or `images/` beside `labels/` |
+| **Pascal VOC** folder or `.xml` | an `Annotations/` folder, or XML files |
+| **Native JSONL** export | the `.jsonl` suffix |
+
+On the command line, `lannotex import <project> <source>` does the same, and `--format`
+overrides the detection.
+
+What carries over:
+
+- **COCO**: boxes, and polygon segmentation. RLE masks are counted and skipped.
+- **YOLO**: boxes, and segmentation lines with three or more points. Class names come from
+  `data.yaml`, or `classes.txt`/`classes.json`. Every split folder is read.
+- **VOC**: boxes. VOC stores no polygons, so a polygon exported to VOC returns as its box.
+
+A line or shape that cannot be represented is counted and reported in the import summary; it
+never stops the rest of the file.
 
 Each referenced image is checked: it must exist, and its dimensions must match the
 annotation file. Labels you don't have yet are created. An image that already has

@@ -42,6 +42,12 @@ def build_parser():
     exp.add_argument('--split', action='store_true', help='split a YOLO export into train/val/test (80/10/10)')
     exp.add_argument('--seed', type=int, default=0, help='seed for --split, so the same split can be reproduced')
 
+    imp = sub.add_parser('import', help='import annotations from another tool into a project')
+    imp.add_argument('project', help='project folder that contains project.sqlite3')
+    imp.add_argument('source', help='a file or dataset folder: LabelMe, COCO, YOLO, Pascal VOC or native JSONL')
+    imp.add_argument('--format', choices=['auto', 'labelme', 'coco', 'yolo', 'voc', 'native'], default='auto',
+                     help='override the detected format (default: %(default)s)')
+
     ana = sub.add_parser('analyze', help='validate a project and print a health report as JSON')
     ana.add_argument('project', help='project folder that contains project.sqlite3')
 
@@ -75,6 +81,15 @@ def main(argv=None):
             print('Split: ' + ', '.join(f'{name} {count}' for name, count in result['split'].items()))
         if result['errors']:
             print('Errors:', file=sys.stderr)
+            print('\n'.join(result['errors']), file=sys.stderr)
+        return 0
+    if args.command == 'import':
+        from .importers import import_annotations
+        result = import_annotations(args.project, args.source, _cancel(), _progress, fmt=args.format)
+        print(f"Imported {result['added']} images as {result['format']}")
+        for reason, count in sorted(result.get('skipped_shapes', {}).items()):
+            print(f'  skipped {count}: {reason}', file=sys.stderr)
+        if result['errors']:
             print('\n'.join(result['errors']), file=sys.stderr)
         return 0
     if args.command == 'analyze':

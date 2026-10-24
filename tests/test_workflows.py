@@ -4,7 +4,8 @@ from pathlib import Path
 from PIL import Image
 import pytest
 from lannotex.domain import Annotation
-from lannotex.exporters import export_project, import_annotations
+from lannotex.exporters import export_project
+from lannotex.importers import import_annotations
 from lannotex.storage import Project
 from lannotex.workers import import_images
 

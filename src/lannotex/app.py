@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QCombo
 from . import __version__
 from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
-from .exporters import EXPORT_FORMATS, analyze, export_project, import_annotations
+from .exporters import EXPORT_FORMATS, analyze, export_project
+from .importers import import_annotations
 from .models import ImageListModel
 from .palette import CommandPalette, menu_commands
 from .thumbnails import Thumbnails

@@ -93,7 +93,8 @@ Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.git
 | **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
 | **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
 | **Export** | Labelme JSON · ready-to-train YOLO boxes and segments with a reproducible train/val/test split · Pascal VOC · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
-| **Automate** | `lannotex export` and `lannotex analyze` run headless in CI, with no display needed |
+| **Import** | COCO · YOLO (boxes and segments) · Pascal VOC · LabelMe · native JSONL, detected from what you point at |
+| **Automate** | `lannotex export`, `lannotex import` and `lannotex analyze` run headless in CI, with no display needed |
 | **Collaborate** | Optional LAN host with per-reviewer tokens, background sync, revision conflicts you resolve explicitly, revocation, and an audit history |
 
 ## Lannotex vs. LabelMe
