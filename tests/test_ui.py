@@ -147,7 +147,7 @@ def test_full_resolution_tiles_prefetch_minimap_and_grid(window,qt,tmp_path):
     assert any(key[0]==neighbour for key in w.loader.cache), 'next image should be prefetched'
 
     c.actual_pixels(); c.repaint()
-    assert abs(c.source_scale()-1)<0.01 and w.zoom_label.text()=='100%'
+    assert abs(c.source_scale()-1)<0.01 and w.zoom_button.text()=='100%'
     # Building tiles writes to disk, so allow for a slow shared runner.
     wait_for(qt,lambda:c.pyramid is not None and c.pyramid.complete() and w.tile_job is None,timeout=60)
     assert c.pyramid.level_size(0)==(5000,1200)
@@ -178,17 +178,18 @@ def test_image_adjustments_change_only_the_display(window,qt,tmp_path):
 
 def test_dockable_panels_focus_and_layout_presets(window,qt,tmp_path):
     w=window; open_ready(w,qt,project(tmp_path))
-    assert set(w.docks)=={'dataset','inspector','view'}
+    assert set(w.docks)=={'dataset','inspector'}
     shown=lambda d:d.toggleViewAction().isChecked()  # true for a panel behind another tab too
     assert all(shown(d) for d in w.docks.values()) and w.docks['inspector'].isVisible()
-    assert w.docks['view'] in w.dock_host.tabifiedDockWidgets(w.docks['inspector'])
+    # Display settings share the inspector column instead of a tab that repeats its own title.
+    assert w.view_section.isVisible() and not w.view_section.header.isChecked()
     w.toggle_focus(); qt.processEvents(); assert not any(shown(d) for d in w.docks.values())
     w.toggle_focus(); qt.processEvents(); assert all(shown(d) for d in w.docks.values())
     w.apply_layout('right'); qt.processEvents()
     assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.RightDockWidgetArea
     assert w.docks['dataset'] in w.dock_host.tabifiedDockWidgets(w.docks['inspector'])
-    w.docks['view'].hide(); w.apply_layout('default'); qt.processEvents()
-    assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.LeftDockWidgetArea and shown(w.docks['view'])
+    w.docks['dataset'].hide(); w.apply_layout('default'); qt.processEvents()
+    assert w.dock_host.dockWidgetArea(w.docks['dataset'])==Qt.LeftDockWidgetArea and shown(w.docks['dataset'])
     w.toggle_minimap(); assert w.minimap_check.isChecked()==w.canvas.show_minimap
     w.minimap_check.setChecked(not w.minimap_check.isChecked()); assert w.minimap_check.isChecked()==w.canvas.show_minimap
 
@@ -203,7 +204,7 @@ def test_command_palette_finds_and_runs_commands(window,qt,tmp_path):
     assert 'Save & next' in titles and 'Default layout' in titles and not any(t.startswith('Command palette') for t in titles)
     QTest.keyClicks(p.query,'actual'); assert p.results.currentItem().text().startswith('Actual pixels')
     QTest.keyClick(p.query,Qt.Key_Return); qt.processEvents()
-    assert not p.isVisible() and w.zoom_label.text()=='100%'
+    assert not p.isVisible() and w.zoom_button.text()=='100%'
 
 
 def test_thumbnails_load_in_background_and_cache_on_disk(window,qt,tmp_path):

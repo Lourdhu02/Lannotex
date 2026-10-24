@@ -19,7 +19,8 @@ PATHS = {
     'plus': '<path d="M12 5v14M5 12h14"/>',
     'folder-open': '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V11"/><path d="M3 7v11.5h15.5L21 11H6.5z"/>',
     'users': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5a6.5 6.5 0 0 1 3 5.5"/>',
-    'settings': '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+    # Sliders, not a gear with rays: a circle plus rays reads as a sun.
+    'settings': '<path d="M5 5v5M5 14v5M12 5v9M12 18v1M19 5v1M19 10v9"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="16" r="2"/><circle cx="19" cy="8" r="2"/>',
     'export': '<path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>',
     'chart': '<path d="M4 20V10M10 20V4M16 20v-7M2.5 20.5h19"/>',
     'save': '<path d="M5 3h11l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',

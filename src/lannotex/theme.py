@@ -27,6 +27,12 @@ def apply_theme(app, dark=True):
         QFrame#panel, QScrollArea {{ background:{panel}; border:1px solid {border}; border-radius:8px; }}
         QLabel#brand {{ font-size:19pt; font-weight:700; }}
         QLabel#section {{ color:{muted}; font-size:9pt; font-weight:600; padding-top:8px; }}
+        QToolButton#sectionHeader {{ background:transparent; border:0; border-bottom:1px solid {border};
+                                     padding:4px 2px; font-weight:600; color:{text}; text-align:left; }}
+        QToolButton#sectionHeader:hover {{ color:{accent}; border-bottom-color:{accent}; }}
+        QFrame#sectionBody {{ background:transparent; border:0; }}
+        QToolButton#iconOnly {{ font-size:13pt; padding:2px 10px; }}
+        QToolButton#iconOnly::menu-indicator {{ image:none; width:0; }}
         QLabel#muted {{ color:{muted}; }}
         QLabel#save {{ color:{accent}; padding:6px 12px; background:{raised}; border-radius:6px; }}
         QPushButton, QToolButton {{ background:{panel}; border:1px solid {border}; border-radius:5px; padding:7px 11px; }}
@@ -35,6 +41,7 @@ def apply_theme(app, dark=True):
         QPushButton#primary {{ background:{accent}; border-color:{accent}; color:{on_accent}; font-weight:600; }}
         QPushButton#danger {{ color:{text}; }}
         QPushButton:disabled, QToolButton:disabled {{ color:{muted}; border-color:{border}; }}
+        QPushButton#primary:disabled {{ background:{panel}; border-color:{border}; color:{muted}; }}
         QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QKeySequenceEdit {{ background:{bg}; border:1px solid {border}; border-radius:5px; padding:7px; selection-background-color:{accent}; }}
         QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {{ border-color:{accent}; }}
         QComboBox::drop-down {{ border:0; width:20px; }}

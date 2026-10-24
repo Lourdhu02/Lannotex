@@ -129,8 +129,13 @@ class Canvas(QWidget):
 
     def zoom_by(self, factor, anchor=None): self.set_zoom(self.zoom*factor, anchor)
 
+    def set_source_scale(self, scale):
+        """Zoom so one source pixel covers `scale` screen pixels (1.0 is actual size)."""
+        if self.image is not None:
+            self.set_zoom(scale * self.source[0] / (self.image.width() * self.base_scale()))
+
     def actual_pixels(self):
-        if self.image is not None: self.set_zoom(self.source[0] / (self.image.width() * self.base_scale()))
+        self.set_source_scale(1.)
 
     def center_on(self, nx, ny):
         r = self.image_rect()

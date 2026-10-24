@@ -8,11 +8,11 @@ import sys
 import uuid
 from PySide6.QtCore import QEvent, QModelIndex, QSettings, QSize, Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QAction, QColor, QKeySequence
-from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
+from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QTabWidget,
     QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFileDialog, QSlider, QFrame, QGridLayout,
     QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel, QLineEdit, QListView, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
+    QMenu, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QToolButton, QVBoxLayout, QWidget)
 from . import __version__
 from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
@@ -21,6 +21,7 @@ from .importers import import_annotations
 from .models import ImageListModel
 from .palette import CommandPalette, menu_commands
 from .thumbnails import Thumbnails
+from .widgets import Section, fit_list
 from .tiles import Pyramid, cache_dir as tile_cache_dir, prune as prune_tiles
 from .icons import icon, logo
 from .storage import ConflictError, Project, atomic_text
@@ -101,7 +102,7 @@ class Main(QMainWindow):
         for widget,name in [(self.home_button,'home'),(self.new_button,'plus'),(self.open_button,'folder-open'),(self.team_button,'users'),
                             (self.theme_button,'theme'),(self.analysis_button,'chart'),(self.import_button,'folder-plus'),(self.files_button,'file-plus'),
                             (self.undo_button,'undo'),(self.redo_button,'redo'),(self.fit_button,'fit'),(self.prev_button,'prev'),
-                            (self.next_image_button,'next'),(self.save_button,'save')]:
+                            (self.next_image_button,'next'),(self.save_button,'save'),(self.add_label_button,'plus')]:
             widget.setIcon(icon(name,color)); widget.setIconSize(QSize(18,18))
         self.export_button.setIcon(icon('export',on_accent)); self.export_button.setIconSize(QSize(18,18))
         for mode,tool in self.tool_buttons.items():
@@ -127,6 +128,8 @@ class Main(QMainWindow):
         # Inner main window so panels dock, tab, float and persist within the workspace page only.
         self.dock_host=QMainWindow(); self.dock_host.setWindowFlags(Qt.Widget); self.dock_host.setObjectName('dockHost')
         self.dock_host.setDockOptions(QMainWindow.AnimatedDocks|QMainWindow.AllowTabbedDocks|QMainWindow.AllowNestedDocks)
+        # Tabs belong above their panel: at the bottom they read as a status bar and get missed.
+        self.dock_host.setTabPosition(Qt.AllDockWidgetAreas,QTabWidget.North)
         self.left=QFrame(); self.left.setObjectName('panel'); left=QVBoxLayout(self.left); left.setContentsMargins(12,10,12,10)
         self.dataset_count=label('0 images'); left.addWidget(self.dataset_count)
         row=QHBoxLayout(); self.import_button=button('Folder',self.import_folder); self.import_button.setToolTip('Import a folder of images (Ctrl+I)'); row.addWidget(self.import_button)
@@ -141,8 +144,9 @@ class Main(QMainWindow):
         self.images.setUniformItemSizes(True); self.images.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.images.setAccessibleName('Project images'); self.images.selectionModel().currentChanged.connect(self.select_index)
         left.addWidget(self.images,1)
-        self.left_hint=label('Images stay on your disk.\nNothing is uploaded.'); left.addWidget(self.left_hint)
-        self.left.setMinimumWidth(220)
+        self.left_hint=label('Images stay on your disk. Nothing is uploaded.'); self.left_hint.setWordWrap(True)
+        left.addWidget(self.left_hint)
+        self.left.setMinimumWidth(240)
         center=QWidget(); middle=QVBoxLayout(center); middle.setContentsMargins(8,0,8,0); middle.setSpacing(8)
         top=QHBoxLayout(); self.image_title=label('Annotation studio','section'); top.addWidget(self.image_title,1)
         self.save_badge=label('No project','save'); top.addWidget(self.save_badge); middle.addLayout(top)
@@ -153,16 +157,20 @@ class Main(QMainWindow):
         self.tool_buttons['select'].setChecked(True)
         tools.addStretch(); self.undo_button=button('',self.undo); self.undo_button.setToolTip('Undo (Ctrl+Z)'); self.undo_button.setAccessibleName('Undo'); tools.addWidget(self.undo_button)
         self.redo_button=button('',self.redo); self.redo_button.setToolTip('Redo (Ctrl+Shift+Z)'); self.redo_button.setAccessibleName('Redo'); tools.addWidget(self.redo_button)
-        self.zoom_label=label('100%'); tools.addWidget(self.zoom_label)
+        self.zoom_button=QToolButton(); self.zoom_button.setText('100%'); self.zoom_button.setPopupMode(QToolButton.InstantPopup)
+        self.zoom_button.setToolTip('Zoom level'); self.zoom_button.setAccessibleName('Zoom level')
+        zooms=QMenu(self.zoom_button)
+        for percent in (25,50,100,200,400,800):
+            zooms.addAction(f'{percent}%',lambda p=percent:self.canvas.set_source_scale(p/100))
+        zooms.addSeparator(); zooms.addAction('Fit image',lambda:self.canvas.fit())
+        self.zoom_button.setMenu(zooms); tools.addWidget(self.zoom_button)
         self.fit_button=button('Fit',lambda:self.canvas.fit()); self.fit_button.setToolTip('Fit image (F)'); tools.addWidget(self.fit_button)
         middle.addLayout(tools)
         self.canvas=Canvas(); self.canvas.edited.connect(self.commit); self.canvas.selected.connect(self.selection_changed)
-        self.canvas.message.connect(self.notice); self.canvas.zoomed.connect(lambda n:self.zoom_label.setText(f'{n}%'))
+        self.canvas.message.connect(self.notice); self.canvas.zoomed.connect(self.zoom_changed)
         self.canvas.tiles_wanted.connect(self.request_tiles)
         self.canvas.show_minimap=self.settings.value('minimap',True,type=bool); self.canvas.show_grid=self.settings.value('pixel_grid',True,type=bool)
         middle.addWidget(self.canvas,1)
-        self.canvas_hint=label('B  Draw box   ·   P  Draw polygon   ·   Space + drag  Pan   ·   F  Fit')
-        self.canvas_hint.setWordWrap(True); middle.addWidget(self.canvas_hint)
         footer=QHBoxLayout(); self.prev_button=button('',lambda:self.navigate(-1)); self.prev_button.setToolTip('Previous image (Alt+Left)')
         self.prev_button.setAccessibleName('Previous image'); footer.addWidget(self.prev_button)
         self.position=label('— / —'); footer.addWidget(self.position)
@@ -171,41 +179,63 @@ class Main(QMainWindow):
         footer.addStretch(); self.save_button=button('Save',self.save); footer.addWidget(self.save_button)
         self.next_button=button('Save && next→',self.save_next,True); footer.addWidget(self.next_button); middle.addLayout(footer)
         self.dock_host.setCentralWidget(center)
-        self.right=QScrollArea(); self.right.setWidgetResizable(True); self.right.setMinimumWidth(245)
-        inspector=QWidget(); form=QVBoxLayout(inspector); form.setContentsMargins(14,10,14,14); form.setSpacing(9)
-        self.inspector_heading=label('LABELS & ANNOTATIONS','section'); form.addWidget(self.inspector_heading)
+        self.right=QScrollArea(); self.right.setWidgetResizable(True); self.right.setMinimumWidth(260)
+        self.right.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        inspector=QWidget(); form=QVBoxLayout(inspector); form.setContentsMargins(14,12,14,14); form.setSpacing(10)
+        self.label_section=Section('Labels'); form.addWidget(self.label_section)
         labelbar=QHBoxLayout(); self.label_combo=QComboBox(); self.label_combo.setMinimumWidth(100)
+        self.label_combo.setToolTip('The label applied to new shapes. Press 1–9 to switch.')
         self.label_combo.currentTextChanged.connect(self.label_changed); labelbar.addWidget(self.label_combo,1)
-        self.add_label_button=button('+',self.add_label); self.add_label_button.setToolTip('Add a named label'); labelbar.addWidget(self.add_label_button)
-        form.addLayout(labelbar)
-        tax=QHBoxLayout(); self.rename_button=button('Rename',self.rename_label); self.remove_label_button=button('Remove',self.remove_label)
-        tax.addWidget(self.rename_button); tax.addWidget(self.remove_label_button); form.addLayout(tax)
-        self.classification_heading=label('IMAGE CLASSIFICATION','section'); form.addWidget(self.classification_heading)
-        self.classes=QListWidget(); self.classes.setMinimumHeight(70); self.classes.setMaximumHeight(150)
-        self.classes.itemChanged.connect(self.class_changed); form.addWidget(self.classes)
+        self.add_label_button=button('',self.add_label); self.add_label_button.setToolTip('Add a label'); self.add_label_button.setAccessibleName('Add label')
+        labelbar.addWidget(self.add_label_button)
+        self.label_menu_button=QToolButton(); self.label_menu_button.setText('⋯'); self.label_menu_button.setObjectName('iconOnly')
+        self.label_menu_button.setToolTip('Rename or remove this label')
+        self.label_menu_button.setAccessibleName('Label actions'); self.label_menu_button.setPopupMode(QToolButton.InstantPopup)
+        menu=QMenu(self.label_menu_button)
+        self.rename_button=menu.addAction('Rename label…'); self.rename_button.triggered.connect(self.rename_label)
+        self.remove_label_button=menu.addAction('Remove label'); self.remove_label_button.triggered.connect(self.remove_label)
+        self.label_menu_button.setMenu(menu); labelbar.addWidget(self.label_menu_button)
+        self.label_section.add(labelbar)
+
+        self.class_section=Section('Image classes'); form.addWidget(self.class_section)
+        self.classes=QListWidget(); self.classes.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.classes.itemChanged.connect(self.class_changed)
         self.classes.currentItemChanged.connect(self.class_focused)
-        self.negative=QCheckBox('No target objects in this image'); self.negative.toggled.connect(self.negative_changed); form.addWidget(self.negative)
-        self.objects_heading=label('OBJECTS','section'); form.addWidget(self.objects_heading)
-        self.annotation_list=QListWidget(); self.annotation_list.setMinimumHeight(110); self.annotation_list.setMaximumHeight(220)
-        self.annotation_list.currentItemChanged.connect(self.annotation_selected); form.addWidget(self.annotation_list)
-        self.selection_info=label('Select an object to edit its geometry.'); self.selection_info.setWordWrap(True); form.addWidget(self.selection_info)
+        self.class_section.add(self.classes)
+        self.negative=QCheckBox('No target objects in this image'); self.negative.toggled.connect(self.negative_changed)
+        self.class_section.add(self.negative)
+
+        self.object_section=Section('Objects'); form.addWidget(self.object_section)
+        self.annotation_list=QListWidget(); self.annotation_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.annotation_list.currentItemChanged.connect(self.annotation_selected)
+        self.object_section.add(self.annotation_list)
+        self.selection_info=label('Select an object to edit it.'); self.selection_info.setWordWrap(True)
+        self.object_section.add(self.selection_info)
         self.geometry_widget=QWidget(); grid=QGridLayout(self.geometry_widget); grid.setContentsMargins(0,0,0,0); self.coordinates=[]
         for i,name in enumerate(['Left %','Top %','Right %','Bottom %']):
             box=QDoubleSpinBox(); box.setRange(0,100); box.setDecimals(3); box.setSingleStep(.1)
             grid.addWidget(label(name),i//2*2,i%2); grid.addWidget(box,i//2*2+1,i%2)
             box.editingFinished.connect(self.geometry_changed); self.coordinates.append(box)
-        form.addWidget(self.geometry_widget); self.geometry_widget.hide()
+        self.object_section.add(self.geometry_widget); self.geometry_widget.hide()
         editrow=QHBoxLayout(); self.duplicate_button=button('Duplicate',self.duplicate); editrow.addWidget(self.duplicate_button)
-        self.redraw_button=button('Redraw',lambda:self.canvas.redraw()); editrow.addWidget(self.redraw_button); form.addLayout(editrow)
-        self.delete_button=button('Delete selected',self.delete_selected); self.delete_button.setObjectName('danger'); form.addWidget(self.delete_button)
-        form.addWidget(button('Clear image annotations',self.clear_annotations))
-        self.opacity_heading=label('OVERLAY OPACITY','section'); form.addWidget(self.opacity_heading); self.opacity=QSlider(Qt.Horizontal); self.opacity.setRange(0,70)
-        self.opacity.setValue(self.settings.value('opacity',15,type=int)); self.canvas.opacity=self.opacity.value()/100
-        self.opacity.valueChanged.connect(self.opacity_changed); form.addWidget(self.opacity)
-        self.polygon_hint=label('Polygon: drag a vertex to edit. Double-click an edge to insert. Shift+Delete removes the selected vertex.'); self.polygon_hint.setWordWrap(True); form.addWidget(self.polygon_hint)
-        form.addStretch(); form.addWidget(button('Keyboard && preferences',self.preferences))
+        self.redraw_button=button('Redraw',lambda:self.canvas.redraw()); editrow.addWidget(self.redraw_button)
+        self.object_section.add(editrow)
+        self.delete_button=button('Delete selected',self.delete_selected); self.delete_button.setObjectName('danger')
+        self.object_section.add(self.delete_button)
+        self.clear_button=button('Clear image annotations',self.clear_annotations); self.object_section.add(self.clear_button)
+
+        # Display settings live in the same column, folded away, rather than in a tab that
+        # repeats its own title and hides whatever is not in front.
+        self.view_section=Section('Display'); self.view_section.set_open(False); form.addWidget(self.view_section)
+        self.view_panel=QWidget(); vp=QVBoxLayout(self.view_panel); vp.setContentsMargins(0,0,0,0); vp.setSpacing(4)
+        self.view_section.add(self.view_panel)
+        form.addStretch()
         self.right.setWidget(inspector)
-        self.view_panel=QWidget(); vp=QVBoxLayout(self.view_panel); vp.setContentsMargins(14,10,14,14); vp.setSpacing(4)
+        vp.addWidget(label('Annotation overlay','section')); self.opacity=QSlider(Qt.Horizontal); self.opacity.setRange(0,70)
+        self.opacity.setValue(self.settings.value('opacity',15,type=int)); self.canvas.opacity=self.opacity.value()/100
+        self.opacity.setAccessibleName('Overlay opacity'); self.opacity.setToolTip('How solid annotation fills look')
+        self.opacity.valueChanged.connect(self.opacity_changed); vp.addWidget(self.opacity); vp.addSpacing(10)
+        vp.addWidget(label('Image adjustments','section'))
         self.adjust_sliders={}
         for key,title,low,high,default in [('brightness','Brightness',-100,100,0),('contrast','Contrast',-100,100,0),('gamma','Gamma',20,300,100)]:
             row=QHBoxLayout(); row.addWidget(label(title)); row.addStretch(); value=label(''); row.addWidget(value); vp.addLayout(row)
@@ -218,14 +248,12 @@ class Main(QMainWindow):
         self.grid_check.toggled.connect(self.grid_checked); vp.addWidget(self.grid_check)
         vp.addStretch(); self.adjustments_changed()
         self.docks={}
-        for key,title,widget,area in [('dataset','Dataset',self.left,Qt.LeftDockWidgetArea),('inspector','Inspector',self.right,Qt.RightDockWidgetArea),
-                                      ('view','Image view',self.view_panel,Qt.RightDockWidgetArea)]:
+        for key,title,widget,area in [('dataset','Dataset',self.left,Qt.LeftDockWidgetArea),
+                                      ('inspector','Inspector',self.right,Qt.RightDockWidgetArea)]:
             dock=QDockWidget(title,self.dock_host); dock.setObjectName(f'dock-{key}'); dock.setWidget(widget)
             dock.setFeatures(QDockWidget.DockWidgetMovable|QDockWidget.DockWidgetFloatable|QDockWidget.DockWidgetClosable)
             self.dock_host.addDockWidget(area,dock); self.docks[key]=dock
-        self.dock_host.resizeDocks([self.docks['dataset'],self.docks['inspector']],[260,290],Qt.Horizontal)
-        # Image view shares a tab with the Inspector so the object list keeps full height on laptop screens.
-        self.dock_host.tabifyDockWidget(self.docks['inspector'],self.docks['view']); self.docks['inspector'].raise_()
+        self.dock_host.resizeDocks([self.docks['dataset'],self.docks['inspector']],[280,320],Qt.Horizontal)
         self.default_layout=self.dock_host.saveState()
         wrap=QWidget(); layout=QVBoxLayout(wrap); layout.setContentsMargins(8,8,8,8); layout.addWidget(self.dock_host)
         outer.addWidget(wrap,1); self.setCentralWidget(root)
@@ -305,7 +333,7 @@ class Main(QMainWindow):
         opened=self.project is not None; ready=opened and self.current is not None and not self.loading and self.canvas.image is not None
         for b in (self.import_button,self.files_button,self.analysis_button,self.export_button,self.add_label_button): b.setEnabled(opened and self.job is None)
         remote=bool(self.project.setting('team_remote')) if opened else False
-        self.left_hint.setText('Local cache · shared with\nyour chosen team host.' if remote else 'Images stay on your disk.\nNothing is uploaded automatically.')
+        self.left_hint.setText('Local cache, shared with your chosen team host.' if remote else 'Images stay on your disk. Nothing is uploaded.')
         self.team_button.setEnabled(opened); self.sync_button.setVisible(remote)
         for b in (self.import_button,self.files_button,self.add_label_button,self.rename_button,self.remove_label_button):
             b.setEnabled(opened and self.job is None and not remote)
@@ -315,15 +343,15 @@ class Main(QMainWindow):
         objects=bool(set(tasks)&{'box','polygon'})
         for mode,b in self.tool_buttons.items():
             b.setEnabled(ready and (mode=='select' or mode in tasks)); b.setVisible(objects if mode=='select' else mode in tasks)
-        for widget in (self.classes,self.classification_heading): widget.setVisible('classification' in tasks)
-        for widget in (self.objects_heading,self.annotation_list,self.selection_info,self.duplicate_button,self.redraw_button,self.delete_button,self.opacity,self.opacity_heading): widget.setVisible(objects)
-        self.polygon_hint.setVisible('polygon' in tasks)
-        self.label_combo.setVisible(objects)
-        self.inspector_heading.setText('CLASSES' if tasks==['classification'] else 'LABELS & ANNOTATIONS')
-        self.add_label_button.setText('+ Class' if tasks==['classification'] else '+')
-        self.negative.setText('None of these classes apply' if tasks==['classification'] else 'No target objects in this image')
-        if tasks==['classification']: self.canvas_hint.setText('Select all classes that describe this image · Save & next to continue')
-        if tasks==['classification']: self.geometry_widget.hide()
+        self.class_section.setVisible('classification' in tasks)
+        self.object_section.setVisible(objects)
+        self.label_section.setVisible(objects)
+        classification_only=tasks==['classification']
+        self.label_section.set_title('Labels')
+        self.class_section.set_title('Classes' if classification_only else 'Image classes')
+        self.add_label_button.setToolTip('Add a class' if classification_only else 'Add a label')
+        self.negative.setText('None of these classes apply' if classification_only else 'No target objects in this image')
+        if classification_only: self.geometry_widget.hide()
         self.classes.setEnabled(ready and 'classification' in tasks)
         self.undo_button.setEnabled(ready and bool(self.document.undo_stack)); self.redo_button.setEnabled(ready and bool(self.document.redo_stack))
         selected=ready and self.canvas.selection is not None
@@ -481,6 +509,10 @@ class Main(QMainWindow):
     def cancel_tiles(self):
         if self.tile_job: self.tile_job.cancel.set()
 
+    @Slot(int)
+    def zoom_changed(self,percent):
+        self.zoom_button.setText(f'{percent}%')
+
     def toggle_minimap(self):
         self.canvas.toggle_minimap(); self.settings.setValue('minimap',self.canvas.show_minimap)
         self.minimap_check.blockSignals(True); self.minimap_check.setChecked(self.canvas.show_minimap); self.minimap_check.blockSignals(False)
@@ -568,10 +600,10 @@ class Main(QMainWindow):
         if mode!='select' and mode not in self.project.setting('tasks',['box','polygon','classification']): return
         self.canvas.set_mode(mode)
         for m,b in self.tool_buttons.items(): b.setChecked(m==mode)
-        hints={'select':'Drag to move · corner handles resize · arrow keys nudge',
+        hints={'select':'Drag to move · corner handles resize · arrow keys nudge · double-click an edge to add a vertex',
                'box':'Drag across an object to draw a box · Escape cancels',
-               'polygon':'Click vertices · Enter finishes · Escape cancels'}
-        self.canvas_hint.setText(hints[mode])
+               'polygon':'Click each vertex · Enter finishes · Escape cancels'}
+        self.notice(hints[mode])
 
     def refresh_labels(self):
         self.guard=True; active=self.label_combo.currentText(); self.label_combo.clear(); self.classes.clear()
@@ -581,8 +613,7 @@ class Main(QMainWindow):
             item=QListWidgetItem(name); item.setFlags(item.flags()|Qt.ItemIsUserCheckable); item.setCheckState(Qt.Unchecked)
             item.setForeground(QColor(color)); self.classes.addItem(item)
         if active in self.canvas.colors: self.label_combo.setCurrentText(active)
-        rows=sum(self.classes.sizeHintForRow(i) for i in range(self.classes.count()))+2*self.classes.frameWidth()
-        self.classes.setFixedHeight(min(150,max(70,rows)))
+        fit_list(self.classes,visible_rows=10)
         self.canvas.label=self.label_combo.currentText(); self.guard=False; self.sync_inspector()
 
     def add_label(self):
@@ -633,7 +664,10 @@ class Main(QMainWindow):
             item.setData(Qt.UserRole,a.id); self.annotation_list.addItem(item)
             if a.id==selected: self.annotation_list.setCurrentItem(item)
         self.guard=False; self.selection_changed(selected)
-        self.annotation_list.setFixedHeight(min(160,max(70,self.annotation_list.count()*48)))
+        count=self.annotation_list.count()
+        fit_list(self.annotation_list,visible_rows=6)
+        self.annotation_list.setVisible(bool(count))  # an empty list is just an empty box
+        self.object_section.set_title(f'Objects · {count}' if count else 'Objects')
 
     def class_focused(self,item,previous=None):
         if self.guard or not item or not self.project: return
@@ -653,6 +687,19 @@ class Main(QMainWindow):
                 self.sync_inspector(); return
         self.commit([] if checked else self.document.annotations,checked)
 
+    def describe(self,a):
+        """Size in real pixels is what a labeller checks; the internal id is not."""
+        if not self.current: return a.kind.title()
+        width,height=self.current['width'],self.current['height']
+        if a.kind=='box':
+            x0,y0,x1,y1=a.geometry
+            return f'Box · {round((x1-x0)*width)} × {round((y1-y0)*height)} px'
+        if a.kind=='polygon':
+            xs=[p[0] for p in a.geometry]; ys=[p[1] for p in a.geometry]
+            span=f'{round((max(xs)-min(xs))*width)} × {round((max(ys)-min(ys))*height)} px'
+            return f'Polygon · {len(a.geometry)} vertices · {span}'
+        return a.kind.title()
+
     def annotation_selected(self,item,previous=None):
         if not self.guard: self.canvas.select(item.data(Qt.UserRole) if item else None)
 
@@ -661,12 +708,12 @@ class Main(QMainWindow):
         self.guard=True
         if a:
             self.label_combo.setCurrentText(a.label)
-            self.selection_info.setText(f'{a.kind.title()} · {a.id[:8]}')
+            self.selection_info.setText(self.describe(a))
             for i in range(self.annotation_list.count()):
                 if self.annotation_list.item(i).data(Qt.UserRole)==ident: self.annotation_list.setCurrentRow(i)
             if a.kind=='box':
                 for box,value in zip(self.coordinates,a.geometry): box.setValue(value*100)
-        else: self.selection_info.setText('Select an object to edit its geometry.')
+        else: self.selection_info.setText('Select an object to edit it.')
         self.geometry_widget.setVisible(a is not None and a.kind=='box')
         self.guard=False; self.refresh_controls()
 

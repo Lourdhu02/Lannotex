@@ -67,7 +67,7 @@ class Home(QWidget):
         self.continue_button=QPushButton('Continue  →'); self.continue_button.setObjectName('primary')
         self.continue_button.clicked.connect(self.resume); row.addWidget(self.continue_button)
         b=QPushButton('Open another…'); b.clicked.connect(self.open_requested); row.addWidget(b); layout.addLayout(row)
-        self.recents=QListWidget(); self.recents.setMinimumHeight(130); self.recents.setMaximumHeight(260)
+        self.recents=QListWidget(); self.recents.setMaximumHeight(260)
         self.recents.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); self.recents.setTextElideMode(Qt.ElideMiddle)
         self.recents.itemDoubleClicked.connect(lambda item:self.continue_requested.emit(item.data(Qt.UserRole)))
         layout.addWidget(self.recents)
@@ -85,8 +85,15 @@ class Home(QWidget):
             exists=(Path(path)/'project.sqlite3').is_file()
             item=QListWidgetItem(f"{Path(path).name}{'' if exists else ' · unavailable'}\n{path}")
             item.setData(Qt.UserRole,path); self.recents.addItem(item)
-        if self.recents.count(): self.recents.setCurrentRow(0)
-        self.empty.setVisible(not self.recents.count()); self.continue_button.setEnabled(bool(self.recents.count()))
+        count=self.recents.count()
+        if count:
+            self.recents.setCurrentRow(0)
+            row=self.recents.sizeHintForRow(0) or 44
+            self.recents.setFixedHeight(min(260,count*row+2*self.recents.frameWidth()+2))
+        # An empty list is an empty box with a border; say why it is empty instead.
+        self.recents.setVisible(bool(count))
+        self.empty.setVisible(not count)
+        self.continue_button.setEnabled(bool(count))
 
     def resume(self):
         item=self.recents.currentItem()

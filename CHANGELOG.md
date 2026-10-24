@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The workspace was rebuilt around what you actually use.** The right-hand panel crammed
+  eight sections into one column, so on a laptop the class list and the object list each got
+  their own scrollbar inside the panel's scrollbar, and controls were cut off mid-sentence.
+  - It is now a single column of **collapsible sections** — Labels, Image classes, Objects,
+    Display — anchored to the top, so folding one never shifts the others.
+  - Lists size themselves to their contents, so **a panel never scrolls inside a panel**.
+  - Display settings moved in beside the rest instead of a tab that repeated its own title.
+  - Rename and remove moved into a **⋯** menu, out of the path you use on every shape.
+- The selected object now reads **"Polygon · 12 vertices · 237 × 240 px"** instead of an
+  internal id, because size in real pixels is what you check.
+- The zoom readout is a **menu**: jump to 25–800% or fit.
+- The hint strip under the canvas is gone; it repeated the toolbar, which already shows every
+  shortcut. Contextual hints appear in the status bar instead.
+- Home no longer shows an empty bordered box when you have no recent projects, and **Continue**
+  now looks disabled when there is nothing to continue.
+- The Settings icon was a sun; it is now sliders.
+
 ### Fixed
 
 - **Closing the window took two attempts.** A background job, a team sync, or even an
