@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QCombo
 from . import __version__
 from .canvas import Canvas
 from .domain import Annotation, Document, validate_all
-from .exporters import analyze, export_project, import_annotations
+from .exporters import EXPORT_FORMATS, analyze, export_project, import_annotations
 from .models import ImageListModel
 from .palette import CommandPalette, menu_commands
 from .thumbnails import Thumbnails
@@ -747,7 +747,12 @@ class Main(QMainWindow):
             if details: self.show_report('Import summary',text+'\n\n'+'\n\n'.join(details))
             self.notice(text)
         elif self.job_kind=='export':
-            self.show_report('Export summary',f"Included: {result['included']}\nUnlabeled included: {result['unlabeled']}\nSkipped images: {result['skipped']}\nAnnotations unsupported by this format: {result['unsupported_annotations']}\nCancelled: {result.get('cancelled',False)}\n\n{result['path']}\n\n"+'\n'.join(result['errors']))
+            parts=[f"Included: {result['included']}",f"Unlabeled included: {result['unlabeled']}",
+                   f"Skipped images: {result['skipped']}",
+                   f"Annotations unsupported by this format: {result['unsupported_annotations']}"]
+            if result.get('split'): parts.append('Split: '+', '.join(f'{k} {v}' for k,v in result['split'].items()))
+            parts.append(f"Cancelled: {result.get('cancelled',False)}")
+            self.show_report('Export summary','\n'.join(parts)+f"\n\n{result['path']}\n\n"+'\n'.join(result['errors']))
         elif self.job_kind=='analysis': self.analysis_result(result)
         elif self.job_kind=='backup': self.notice(f'Backup saved: {result}')
         elif self.job_kind=='join': self.pending_team=result
@@ -777,11 +782,19 @@ class Main(QMainWindow):
     def export_dialog(self):
         if not self.project or self.job or not self.save(): return
         format_name,ok=QInputDialog.getItem(self,'Export annotations','Editable local export format',
-                                          ['Labelme JSON','YOLO boxes','COCO JSON','Classification CSV','Native JSONL'],0,False)
+                                          EXPORT_FORMATS,0,False)
         if not ok: return
+        split=False
+        if format_name.startswith('YOLO'):
+            answer=QMessageBox.question(self,'Split the dataset?',
+                                        'Divide the export into train, val and test (80/10/10)?\n\n'
+                                        'Choose No to put every image in one set.',
+                                        QMessageBox.Yes|QMessageBox.No,QMessageBox.Yes)
+            split=answer==QMessageBox.Yes
         path=QFileDialog.getExistingDirectory(self,'Choose export destination')
         if path:
-            root=self.project.root; self.start_job('export',lambda cancel,progress:export_project(root,path,format_name,cancel,progress))
+            root=self.project.root
+            self.start_job('export',lambda cancel,progress:export_project(root,path,format_name,cancel,progress,split=split))
 
     def show_analysis(self):
         if self.project and not self.job and self.save():

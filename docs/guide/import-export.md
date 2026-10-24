@@ -6,6 +6,8 @@
 | --- | --- | --- |
 | **Labelme JSON** | One JSON per image: boxes as `rectangle`, polygons, classes as `flags` | LabelMe and tools that read its format |
 | **YOLO boxes** | Ready-to-train Ultralytics dataset: `images/`, `labels/`, `data.yaml` | YOLO detection training |
+| **YOLO segments** | The same layout, with polygons as normalized point lists | YOLO segmentation training |
+| **Pascal VOC** | `Annotations/*.xml`, `JPEGImages/`, `ImageSets/Main/` | Tools that read the VOC layout |
 | **COCO JSON** | One `coco.json` with boxes, polygon segmentations, and areas | Detection and instance segmentation |
 | **Classification CSV** | One row per image, one 0/1 column per class | Image classification |
 | **Native JSONL** | Every annotation with its ID and status | Lossless backup and round-trips |
@@ -27,8 +29,9 @@ Lannotex-export-1a2b3c4d/
 └── 00000001_street.json   # per-image files (Labelme JSON)
 ```
 
-Images are **referenced, not copied**: exported records point to the original files. YOLO
-is the exception, described below.
+Images are **referenced, not copied**, except for YOLO, Pascal VOC and COCO, whose layouts
+expect the images beside the annotations. Those are hard-linked when the export is on the same
+drive, so they take no extra space, and copied otherwise. Your originals are never modified.
 
 ### What gets skipped
 
@@ -62,7 +65,14 @@ yolo detect train data=Lannotex-export-1a2b3c4d/data.yaml model=yolo11n.pt
   background.
 - Images you haven't annotated yet are **left out**. If they were included, YOLO would
   treat them as "nothing here".
-- `train` and `val` point at the same images. Split them yourself for a real evaluation.
+- Answer **yes** to the split prompt (or pass `--split` on the command line) to divide the
+  export into `train`, `val` and `test` at 80/10/10. Each image's set is derived from its id
+  and the seed, so the same project and seed always produce the same split, and re-exporting
+  never moves an image between sets. `--seed` changes it.
+- Without a split, every image goes in one set and `train` and `val` both point at it. That is
+  fine for a smoke test and useless for measuring accuracy.
+- On a dataset too small for the ratio to give every set an image, one image is moved into
+  `val` (and `test`) anyway, because YOLO will not train against an empty validation set.
 - If you move the export folder, update `path:` in `data.yaml`.
 
 ## Importing annotations

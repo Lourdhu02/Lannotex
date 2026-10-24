@@ -65,7 +65,9 @@ lannotex export ./my-dataset ./exports --format "YOLO boxes"
 
 | Option | Values |
 | --- | --- |
-| `--format` | `Labelme JSON` (default), `YOLO boxes`, `COCO JSON`, `Classification CSV`, `Native JSONL` |
+| `--format` | `Labelme JSON` (default), `YOLO boxes`, `YOLO segments`, `Pascal VOC`, `COCO JSON`, `Classification CSV`, `Native JSONL` |
+| `--split` | Divide a YOLO export into train/val/test at 80/10/10 |
+| `--seed` | Seed for `--split` (default `0`), so a split can be reproduced |
 
 The command prints the export folder and the number of images included. Skipped images
 and their reasons go to stderr. See [Import & export](guide/import-export.md) for the

@@ -92,7 +92,7 @@ Every shortcut can be remapped. See the [annotating guide](https://lourdhu02.git
 | **View** | Any image size: a 900 MP TIFF reopens in 0.1 s and pans at ~100 fps from a cached tile pyramid, using under 200 MB · sharp full-resolution zoom to 6400% · next/previous images decoded ahead · minimap · pixel grid · brightness, contrast and gamma · thumbnails · dockable panels you can float onto a second monitor, with saved layouts · `Ctrl+K` command palette |
 | **Stay safe** | SQLite projects with versioned migrations · recovery drafts and 700 ms autosave · transactional saves · geometry validation · backup and restore · relinking for moved images · EXIF orientation handled |
 | **Scale** | Virtualized image list (at most 1,024 records in memory) · background import and decoding · 96 MB preview cache · coordinates normalized to the original resolution |
-| **Export** | Labelme JSON · ready-to-train YOLO (`images/`, `labels/`, `data.yaml`) · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
+| **Export** | Labelme JSON · ready-to-train YOLO boxes and segments with a reproducible train/val/test split · Pascal VOC · COCO JSON · classification CSV · lossless native JSONL · each export reports anything it skipped |
 | **Automate** | `lannotex export` and `lannotex analyze` run headless in CI, with no display needed |
 | **Collaborate** | Optional LAN host with per-reviewer tokens, background sync, revision conflicts you resolve explicitly, revocation, and an audit history |
 
@@ -123,7 +123,7 @@ covers which LabelMe shapes import today.
 ```bash
 lannotex new ./dataset                                  # create a project
 lannotex analyze ./dataset                              # JSON health report: counts, problems, drafts
-lannotex export ./dataset ./out --format "COCO JSON"    # Labelme JSON | YOLO boxes | COCO JSON | Classification CSV | Native JSONL
+lannotex export ./dataset ./out --format "YOLO boxes" --split   # also: YOLO segments, Pascal VOC, COCO JSON, Labelme JSON, Classification CSV, Native JSONL
 lannotex invite ./dataset "Alice"                       # print a one-time reviewer token
 lannotex host ./dataset --bind 0.0.0.0 --port 8765      # share a project on your LAN (TLS via --cert/--key)
 ```

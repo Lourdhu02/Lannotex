@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import threading
+from xml.etree import ElementTree
 
 from PIL import Image
 
@@ -70,6 +71,114 @@ def test_coco_record_pixel_bbox_and_categories():
     record = coco_record(image, [Annotation("cat", "box", [0, 0, .5, .5])], ["cat", "dog"])
     assert record["categories"] == [{"id": 1, "name": "cat"}, {"id": 2, "name": "dog"}]
     assert record["annotations"][0]["bbox"] == [0, 0, 50, 50]
+
+
+def detection_project(tmp_path, count=12):
+    from PIL import Image as PILImage
+    root = tmp_path / "project"
+    p = Project(root)
+    p.add_label("cat")
+    p.add_label("dog")
+    ids = []
+    for i in range(count):
+        path = root / f"img{i}.png"
+        PILImage.new("RGB", (200, 100)).save(path)
+        ident = p.add_image(path, 200, 100)
+        p.save_annotations(ident, [Annotation("dog", "box", [.1, .2, .5, .6]),
+                                   Annotation("cat", "polygon", [[.1, .1], [.9, .1], [.9, .8]])])
+        ids.append(ident)
+    p.close()
+    return root, ids
+
+
+def test_coco_file_name_is_relative_and_images_are_exported(tmp_path):
+    root, _ = detection_project(tmp_path, count=2)
+    result = export_project(root, tmp_path / "out", "COCO JSON", threading.Event(), lambda *a: None)
+    out = Path(result["path"])
+    coco = json.loads((out / "coco.json").read_text())
+    assert result["included"] == 2
+    for entry in coco["images"]:
+        assert not Path(entry["file_name"]).is_absolute()
+        assert (out / "images" / entry["file_name"]).is_file(), "file_name must resolve inside the export"
+    assert {c["name"] for c in coco["categories"]} == {"cat", "dog"}
+    assert coco["annotations"] and all(a["image_id"] for a in coco["annotations"])
+
+
+def test_yolo_split_is_deterministic_and_covers_every_set(tmp_path):
+    root, _ = detection_project(tmp_path, count=12)
+    first = export_project(root, tmp_path / "a", "YOLO boxes", threading.Event(), lambda *a: None, split=True, seed=7)
+    second = export_project(root, tmp_path / "b", "YOLO boxes", threading.Event(), lambda *a: None, split=True, seed=7)
+    assert first["split"] == second["split"]
+    assert sum(first["split"].values()) == first["included"] == 12
+    assert all(count > 0 for count in first["split"].values())
+
+    out = Path(first["path"])
+    data = (out / "data.yaml").read_text()
+    for name in ("train", "val", "test"):
+        assert f"{name}: images/{name}" in data
+        images = sorted(p.stem for p in (out / "images" / name).iterdir())
+        labels = sorted(p.stem for p in (out / "labels" / name).iterdir())
+        assert images == labels and images
+
+    from lannotex.exporters import split_for
+    assert any(split_for(i, 7) != split_for(i, 99) for i in range(20)), "the seed must change the assignment"
+    assert all(split_for(i, 7) == split_for(i, 7) for i in range(20))
+
+
+def test_yolo_without_split_keeps_one_set(tmp_path):
+    root, _ = detection_project(tmp_path, count=3)
+    result = export_project(root, tmp_path / "out", "YOLO boxes", threading.Event(), lambda *a: None)
+    out = Path(result["path"])
+    assert "split" not in result
+    assert (out / "images").is_dir() and not (out / "images" / "train").exists()
+    assert "train: images\nval: images" in (out / "data.yaml").read_text()
+
+
+def test_tiny_dataset_still_gets_a_val_set(tmp_path):
+    root, _ = detection_project(tmp_path, count=3)
+    result = export_project(root, tmp_path / "out", "YOLO boxes", threading.Event(), lambda *a: None, split=True, seed=1)
+    out = Path(result["path"])
+    assert result["split"]["train"] >= 1 and result["split"]["val"] >= 1
+    for name in ("train", "val"):
+        images = {p.stem for p in (out / "images" / name).iterdir()}
+        labels = {p.stem for p in (out / "labels" / name).iterdir()}
+        assert images == labels and images
+
+
+def test_yolo_segments_export_writes_polygons(tmp_path):
+    root, _ = detection_project(tmp_path, count=2)
+    result = export_project(root, tmp_path / "out", "YOLO segments", threading.Event(), lambda *a: None)
+    out = Path(result["path"])
+    assert result["included"] == 2
+    assert result["unsupported_annotations"] == 2, "the box on each image cannot be a segment"
+    line = next((out / "labels").glob("*.txt")).read_text().strip()
+    fields = line.split()
+    assert fields[0] == "0" and len(fields) == 7  # class + three xy pairs
+    assert all(0 <= float(v) <= 1 for v in fields[1:])
+
+
+def test_pascal_voc_export(tmp_path):
+    root, _ = detection_project(tmp_path, count=2)
+    result = export_project(root, tmp_path / "out", "Pascal VOC", threading.Event(), lambda *a: None)
+    out = Path(result["path"])
+    assert result["included"] == 2
+    xml_path = next((out / "Annotations").glob("*.xml"))
+    tree = ElementTree.parse(xml_path).getroot()
+    assert tree.find("size/width").text == "200" and tree.find("size/height").text == "100"
+    names = sorted(o.find("name").text for o in tree.findall("object"))
+    assert names == ["cat", "dog"], "a polygon is written as its bounding box"
+    box = tree.find("object/bndbox")
+    assert 1 <= int(box.find("xmin").text) <= int(box.find("xmax").text) <= 200
+    assert (out / "JPEGImages" / tree.find("filename").text).is_file()
+    listed = (out / "ImageSets" / "Main" / "default.txt").read_text().split()
+    assert len(listed) == 2 and all((out / "Annotations" / f"{n}.xml").is_file() for n in listed)
+
+
+def test_voc_xml_escapes_label_text():
+    from lannotex.exporters import voc_xml
+    xml = voc_xml("a.png", 10, 10, [Annotation("a & <b>", "box", [0, 0, 1, 1])])
+    assert "a &amp; &lt;b&gt;" in xml
+    assert ElementTree.fromstring(xml).find("object/name").text == "a & <b>"
 
 
 def test_export_project_empty_creates_manifest(tmp_path):

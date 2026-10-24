@@ -13,7 +13,7 @@ import threading
 
 from . import __version__
 
-EXPORT_FORMATS = ['Labelme JSON', 'YOLO boxes', 'COCO JSON', 'Classification CSV', 'Native JSONL']
+from .exporters import EXPORT_FORMATS  # no Qt; safe to import for the headless commands
 
 
 def _progress(value, message):
@@ -39,6 +39,8 @@ def build_parser():
     exp.add_argument('project', help='project folder that contains project.sqlite3')
     exp.add_argument('destination', help='directory that receives the exported files')
     exp.add_argument('--format', choices=EXPORT_FORMATS, default='Labelme JSON', help='export format (default: %(default)s)')
+    exp.add_argument('--split', action='store_true', help='split a YOLO export into train/val/test (80/10/10)')
+    exp.add_argument('--seed', type=int, default=0, help='seed for --split, so the same split can be reproduced')
 
     ana = sub.add_parser('analyze', help='validate a project and print a health report as JSON')
     ana.add_argument('project', help='project folder that contains project.sqlite3')
@@ -66,8 +68,11 @@ def main(argv=None):
         return gui_main()
     if args.command == 'export':
         from .exporters import export_project
-        result = export_project(args.project, args.destination, args.format, _cancel(), _progress)
+        result = export_project(args.project, args.destination, args.format, _cancel(), _progress,
+                                split=args.split, seed=args.seed)
         print(f"Exported {result['included']} images to {result['path']}")
+        if result.get('split'):
+            print('Split: ' + ', '.join(f'{name} {count}' for name, count in result['split'].items()))
         if result['errors']:
             print('Errors:', file=sys.stderr)
             print('\n'.join(result['errors']), file=sys.stderr)

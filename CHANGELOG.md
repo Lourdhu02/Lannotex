@@ -6,8 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **COCO exports were not loadable.** `file_name` held the absolute path of the original image
+  instead of a name relative to the dataset, so other tools could not find the images. COCO
+  exports now carry an `images/` folder and reference it.
+- **YOLO exports used the same images for training and validation**, which makes any measured
+  accuracy meaningless. Export now offers an 80/10/10 train/val/test split, in the app and as
+  `--split` on the command line. The split comes from each image's id and a seed, so it is
+  reproducible and re-exporting never moves an image between sets.
+
 ### Added
 
+- **Pascal VOC and YOLO segments export.** VOC writes `Annotations/`, `JPEGImages/` and
+  `ImageSets/Main/`; polygons are written as their bounding box, since VOC has no polygon.
 - **Images of any size.** Zooming past the preview now builds a tile pyramid once, caches it on
   disk, and draws only the tiles on screen. A 900 MP TIFF reopens in 0.1 s, pans at roughly
   100 fps and uses under 200 MB — the whole image would need 2.7 GB to decode. The old 64 MP

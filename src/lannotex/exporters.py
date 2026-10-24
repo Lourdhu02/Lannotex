@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import uuid
 from collections import Counter
+import hashlib
 import math
 from . import __version__
 from .domain import Annotation, polygon_area, validate, validate_all
@@ -106,16 +107,89 @@ def link_or_copy(source, target):
     except OSError: shutil.copy2(source, target)
 
 
-def yolo_data_yaml(root, labels):
+EXPORT_FORMATS = ['Labelme JSON', 'YOLO boxes', 'YOLO segments', 'Pascal VOC', 'COCO JSON',
+                  'Classification CSV', 'Native JSONL']
+SPLITS = ('train', 'val', 'test')
+DEFAULT_RATIOS = (.8, .1, .1)
+
+
+def split_for(image_id, seed, ratios=DEFAULT_RATIOS):
+    """Deterministic per-image split: the same image and seed always land in the same set,
+    whatever order the export visits them in."""
+    digest = hashlib.sha1(f'{seed}:{image_id}'.encode()).digest()
+    point = int.from_bytes(digest[:8], 'big') / float(1 << 64)
+    edge = 0.
+    for name, share in zip(SPLITS, ratios):
+        edge += share
+        if point < edge: return name
+    return SPLITS[0]
+
+
+def yolo_data_yaml(root, labels, split):
     names = '\n'.join(f'  {i}: {json.dumps(name)}' for i, name in enumerate(labels))
-    return ('# Ultralytics YOLO dataset exported by Lannotex.\n'
-            '# Train:  yolo detect train data=data.yaml model=yolo11n.pt\n'
-            "# Update 'path' if you move this folder. train and val use the same images; split them for real evaluation.\n"
-            f'path: {json.dumps(str(root))}\ntrain: images\nval: images\nnames:\n{names}\n')
+    task = '# Train:  yolo detect train data=data.yaml model=yolo11n.pt\n'
+    header = ('# Ultralytics YOLO dataset exported by Lannotex.\n' + task +
+              "# Update 'path' if you move this folder.\n")
+    if split:
+        sets = ''.join(f'{name}: images/{name}\n' for name in SPLITS)
+    else:
+        header += '# Every image is in one set; export with a split for a real evaluation.\n'
+        sets = 'train: images\nval: images\n'
+    return f'{header}path: {json.dumps(str(root))}\n{sets}names:\n{names}\n'
 
 
-def export_project(root, destination, format_name, cancel, progress):
-    """Stream a consistent DB snapshot; publish the completed directory by rename."""
+def voc_xml(file_name, width, height, annotations, folder='JPEGImages'):
+    """Pascal VOC has only axis-aligned boxes, so a polygon is written as its extent."""
+    def escape(text):
+        return (str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                .replace('"', '&quot;'))
+
+    parts = [f'<annotation>\n  <folder>{escape(folder)}</folder>\n  <filename>{escape(file_name)}</filename>',
+             f'  <size>\n    <width>{width}</width>\n    <height>{height}</height>\n    <depth>3</depth>\n  </size>',
+             '  <segmented>0</segmented>']
+    for a in annotations:
+        if a.kind == 'box':
+            x0, y0, x1, y1 = a.geometry
+        elif a.kind == 'polygon':
+            xs = [p[0] for p in a.geometry]; ys = [p[1] for p in a.geometry]
+            x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+        else:
+            continue
+        box = (max(1, round(x0*width)+1), max(1, round(y0*height)+1),
+               min(width, round(x1*width)), min(height, round(y1*height)))
+        parts.append(f'  <object>\n    <name>{escape(a.label)}</name>\n    <pose>Unspecified</pose>\n'
+                     f'    <truncated>0</truncated>\n    <difficult>0</difficult>\n'
+                     f'    <bndbox>\n      <xmin>{box[0]}</xmin>\n      <ymin>{box[1]}</ymin>\n'
+                     f'      <xmax>{box[2]}</xmax>\n      <ymax>{box[3]}</ymax>\n    </bndbox>\n  </object>')
+    parts.append('</annotation>\n')
+    return '\n'.join(parts)
+
+
+def yolo_segment_line(a, class_id):
+    if a.kind != 'polygon': return None
+    coordinates = ' '.join(f'{value:.6f}' for point in a.geometry for value in point)
+    return f'{class_id} {coordinates}'
+
+
+def rebalance(output, members):
+    """A random split can leave val empty on a small dataset, which YOLO refuses to train on.
+    Move one image over rather than hand back a dataset that cannot be used."""
+    for name in ('val', 'test'):
+        while not members[name] and len(members['train']) > 1:
+            moved = members['train'].pop()
+            members[name].append(moved)
+            for folder, suffix in (('labels', '.txt'), ('images', None)):
+                source = next((p for p in (output/folder/'train').glob(moved+'.*')), None) if suffix is None \
+                    else output/folder/'train'/(moved+suffix)
+                if source and source.exists(): source.replace(output/folder/name/source.name)
+
+
+def export_project(root, destination, format_name, cancel, progress, split=False, seed=0):
+    """Stream a consistent DB snapshot; publish the completed directory by rename.
+
+    `split` divides a YOLO export into train/val/test; the assignment is derived from each
+    image's id and `seed`, so the same project and seed always produce the same split.
+    """
     project = Project(root,create=False)
     project.conn.execute('BEGIN')
     destination = Path(destination)
@@ -125,8 +199,18 @@ def export_project(root, destination, format_name, cancel, progress):
     try:
         labels = [r['name'] for r in project.labels()]
         atomic_text(output/'classes.json',json.dumps(labels,indent=2))
-        yolo = format_name == 'YOLO boxes'
-        if yolo: (output/'images').mkdir(); (output/'labels').mkdir()
+        yolo_seg = format_name == 'YOLO segments'
+        yolo = format_name == 'YOLO boxes' or yolo_seg
+        coco = format_name == 'COCO JSON'
+        voc = format_name == 'Pascal VOC'
+        split = bool(split) and yolo
+        if yolo:
+            for folder in ('images','labels'):
+                for part in (SPLITS if split else ('',)): (output/folder/part).mkdir(parents=True)
+        if coco: (output/'images').mkdir()
+        if voc:
+            for folder in ('Annotations','JPEGImages','ImageSets/Main'): (output/folder).mkdir(parents=True)
+        members = {name: [] for name in SPLITS}
         # Spool COCO arrays to disk, rather than keeping all annotations in RAM.
         with (output/'images.jsonl').open('w',encoding='utf-8') as ims, (output/'annotations.jsonl').open('w',encoding='utf-8') as anns, (output/'classification.csv').open('w',encoding='utf-8',newline='') as csvfile:
             writer = csv.writer(csvfile); writer.writerow(['image_id','image_path','status',*labels])
@@ -151,18 +235,36 @@ def export_project(root, destination, format_name, cancel, progress):
                 summary['included'] += 1
                 if row['status']=='new': summary['unlabeled'] += 1
                 name = f"{row['id']:08d}_{Path(row['path']).stem}"
-                source = str(project.resolve(row['path']))
+                source_path = project.resolve(row['path'])
+                source = str(source_path)
+                suffix = source_path.suffix.lower()
                 image = {'id':row['id'],'file_name':source,'width':row['width'],'height':row['height']}
-                ims.write(json.dumps(image)+'\n')
+                if coco:
+                    # COCO file_name is resolved against the dataset's images folder, never absolute.
+                    ims.write(json.dumps({**image,'file_name':name+suffix})+'\n')
+                    link_or_copy(source_path, output/'images'/(name+suffix))
+                else:
+                    ims.write(json.dumps(image)+'\n')
                 if format_name == 'Labelme JSON':
                     atomic_text(output/(name+'.json'),json.dumps(labelme_data(source,row['width'],row['height'],annotations,negative),indent=2))
                 elif yolo:
-                    lines = [yolo_line(a,labels.index(a.label)) for a in annotations if a.kind=='box']
-                    source_path = project.resolve(row['path'])
-                    link_or_copy(source_path, output/'images'/(name+source_path.suffix.lower()))
-                    atomic_text(output/'labels'/(name+'.txt'),'\n'.join(lines)+ ('\n' if lines else ''))
-                    summary['unsupported_annotations'] += sum(a.kind!='box' for a in annotations)
-                elif format_name == 'COCO JSON':
+                    part = split_for(row['id'],seed) if split else ''
+                    members[part or 'train'].append(name)
+                    if yolo_seg:
+                        lines = [yolo_segment_line(a,labels.index(a.label)) for a in annotations if a.kind=='polygon']
+                        summary['unsupported_annotations'] += sum(a.kind!='polygon' for a in annotations)
+                    else:
+                        lines = [yolo_line(a,labels.index(a.label)) for a in annotations if a.kind=='box']
+                        summary['unsupported_annotations'] += sum(a.kind!='box' for a in annotations)
+                    link_or_copy(source_path, output/'images'/part/(name+suffix))
+                    atomic_text(output/'labels'/part/(name+'.txt'),'\n'.join(lines)+ ('\n' if lines else ''))
+                elif voc:
+                    link_or_copy(source_path, output/'JPEGImages'/(name+suffix))
+                    atomic_text(output/'Annotations'/(name+'.xml'),
+                                voc_xml(name+suffix,row['width'],row['height'],annotations))
+                    members['train'].append(name)
+                    summary['unsupported_annotations'] += sum(a.kind=='classification' for a in annotations)
+                elif coco:
                     record = coco_record(image,annotations,labels)
                     for ann in record['annotations']:
                         aid += 1; ann['id']=aid; anns.write(json.dumps(ann)+'\n')
@@ -184,11 +286,17 @@ def export_project(root, destination, format_name, cancel, progress):
                             stream.write(line.strip()); first=False
                     stream.write(sep)
                 stream.write(json.dumps([{'id':i+1,'name':s} for i,s in enumerate(labels)])+'}')
-        policy = 'Hard-linked or copied into images/' if yolo else 'Referenced, not copied'
+        if split and not summary.get('cancelled'):
+            rebalance(output, members)
+        if voc and not summary.get('cancelled'):
+            atomic_text(output/'ImageSets'/'Main'/'default.txt','\n'.join(members['train'])+'\n')
+        if split: summary['split'] = {name: len(members[name]) for name in SPLITS}
+        copied = yolo or voc or coco
+        policy = 'Hard-linked or copied into the export' if copied else 'Referenced, not copied'
         atomic_text(output/'manifest.json',json.dumps({'version':__version__,'format_version':1,'editable_local_export':True,'image_policy':policy,'summary':summary},indent=2))
         if not summary.get('cancelled'):
             final = destination/('Lannotex-export-'+uuid.uuid4().hex[:8]); output.rename(final); output=final
-            if yolo: atomic_text(output/'data.yaml', yolo_data_yaml(output.resolve(), labels))
+            if yolo: atomic_text(output/'data.yaml', yolo_data_yaml(output.resolve(), labels, split))
         summary['path'] = str(output)
         return summary
     finally:
